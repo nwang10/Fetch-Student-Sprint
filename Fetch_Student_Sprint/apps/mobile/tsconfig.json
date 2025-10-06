@@ -1,0 +1,22 @@
+{
+  "extends": "@repo/config/typescript.json",
+  "compilerOptions": {
+    "jsx": "react-native",
+    "lib": [
+      "ES2020"
+    ],
+    "paths": {
+      "@/*": [
+        "./*"
+      ]
+    },
+    "noEmit": true
+  },
+  "include": [
+    "**/*.ts",
+    "**/*.tsx"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}
