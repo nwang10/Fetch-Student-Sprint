@@ -3,6 +3,11 @@
   "version": "0.0.0",
   "private": true,
   "main": "index.js",
+  "exports": {
+    "./eslint-preset": "./eslint-preset.js",
+    "./typescript": "./typescript.json",
+    "./prettier": "./prettier.config.js"
+  },
   "files": [
     "eslint-preset.js",
     "typescript.json",

@@ -1,16 +1,17 @@
 {
   "permissions": {
     "allow": [
-      "Bash(mkdir:*)",
-      "Bash(npx create-next-app:*)",
-      "Bash(pnpm install:*)",
-      "Bash(tree:*)",
-      "Bash(chmod:*)",
-      "Bash(pnpm build:*)",
-      "Bash(pnpm add:*)",
-      "Read(//c/Users/natha/**)",
-      "Bash(timeout 10 pnpm dev)",
-      "Bash(git add:*)"
+      "Bash(pnpm lint:*)",
+      "Bash(pnpm list:*)",
+      "Bash(pnpm type-check:*)",
+      "Bash(pnpm tsc:*)",
+      "Bash(cat:*)",
+      "Bash(echo $APPDATA)",
+      "Bash(ls:*)",
+      "Bash(pnpm start:*)",
+      "Bash(pnpm dev:*)",
+      "Bash(npx expo install:*)",
+      "Bash(pnpm add:*)"
     ],
     "deny": [],
     "ask": []
