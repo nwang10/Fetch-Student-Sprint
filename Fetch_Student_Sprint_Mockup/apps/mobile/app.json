@@ -16,14 +16,19 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.fetch.mobile"
+      "bundleIdentifier": "com.fetch.mobile",
+      "infoPlist": {
+        "NSCameraUsageDescription": "This app uses the camera to scan receipts and award points.",
+        "NSPhotoLibraryUsageDescription": "This app needs access to your photos to share your shopping hauls."
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.fetch.mobile"
+      "package": "com.fetch.mobile",
+      "permissions": ["CAMERA"]
     },
     "web": {
       "favicon": "./assets/favicon.png"
