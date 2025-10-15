@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,8 @@ import {
   StyleSheet,
   ImageSourcePropType,
 } from 'react-native';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import Toast from '../components/Toast';
 
 // Types
 interface Post {
@@ -231,15 +233,119 @@ const FeedHeader: React.FC = () => (
 
 // Main Feed Screen
 export default function FeedScreen() {
+  const router = useRouter();
+  const params = useLocalSearchParams();
+  const [posts, setPosts] = useState(POSTS_DATA);
+  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastEmoji, setToastEmoji] = useState('🎉');
+
+  useEffect(() => {
+    if (params.newPost) {
+      try {
+        const newPostData = JSON.parse(params.newPost as string);
+        handleNewPost(newPostData);
+      } catch (e) {
+        console.error('Failed to parse new post:', e);
+      }
+    }
+  }, [params.newPost]);
+
+  const handleNewPost = (postData: any) => {
+    let newPost: Post;
+    let points = 0;
+    let emoji = '🎉';
+
+    if (postData.type === 'haul') {
+      points = postData.shareExternal ? 35 : 25;
+      newPost = {
+        id: Date.now().toString(),
+        avatar: 'https://i.pravatar.cc/100?img=50',
+        name: 'You',
+        subline: 'Just posted',
+        caption: postData.caption,
+        imageSource: { uri: postData.image },
+        initialLikes: 0,
+        initialComments: 0,
+        points,
+      };
+      setToastMessage(`Posted to your Fetch Feed! +${points} Fetch Points earned.`);
+      setToastEmoji('🎉');
+    } else if (postData.type === 'roast') {
+      points = postData.shareExternal ? 40 : 30;
+      newPost = {
+        id: Date.now().toString(),
+        avatar: 'https://i.pravatar.cc/100?img=50',
+        name: 'You',
+        subline: 'AI Roasted their receipt',
+        caption: `${postData.roastEmoji} ${postData.roastText}`,
+        imageSource: { uri: 'https://picsum.photos/seed/roast/800/600' },
+        initialLikes: 0,
+        initialComments: 0,
+        points,
+      };
+      setToastMessage(`Your Roast is live! +${points} Fetch Points earned.`);
+      setToastEmoji('😂');
+    } else if (postData.type === 'review') {
+      points = postData.shareExternal ? 50 : 40;
+      newPost = {
+        id: Date.now().toString(),
+        avatar: 'https://i.pravatar.cc/100?img=50',
+        name: 'You',
+        subline: 'Reviewed a product',
+        caption: `${'⭐'.repeat(postData.rating)} ${postData.productName}\n"${postData.reviewText}"`,
+        imageSource: { uri: 'https://picsum.photos/seed/review/800/600' },
+        initialLikes: 0,
+        initialComments: 0,
+        points,
+      };
+      setToastMessage(`Review posted! +${points} Fetch Points earned.`);
+      setToastEmoji('⭐');
+    } else {
+      return;
+    }
+
+    // Add post to the top of the feed
+    setPosts([newPost, ...posts]);
+    setShowToast(true);
+
+    // Show bonus toast if external share
+    if (postData.shareExternal) {
+      setTimeout(() => {
+        setToastMessage('Shared externally! +10 bonus points.');
+        setToastEmoji('🚀');
+        setShowToast(true);
+      }, 3500);
+    }
+  };
+
   return (
     <View style={styles.container}>
       <FeedHeader />
       <FlatList
-        data={POSTS_DATA}
+        data={posts}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => <PostCard post={item} />}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
+      />
+
+      {/* Camera Button */}
+      <TouchableOpacity
+        style={styles.cameraButton}
+        onPress={() => router.push('/camera')}
+        accessibilityLabel="Open camera to scan receipt"
+        accessibilityRole="button"
+      >
+        <Text style={styles.cameraEmoji}>📷</Text>
+      </TouchableOpacity>
+
+      {/* Toast */}
+      <Toast
+        visible={showToast}
+        message={toastMessage}
+        emoji={toastEmoji}
+        onHide={() => setShowToast(false)}
       />
     </View>
   );
@@ -390,5 +496,25 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#6D28D9',
+  },
+  cameraButton: {
+    position: 'absolute',
+    bottom: 32,
+    right: '50%',
+    marginRight: -32,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  cameraEmoji: {
+    fontSize: 32,
   },
 });
