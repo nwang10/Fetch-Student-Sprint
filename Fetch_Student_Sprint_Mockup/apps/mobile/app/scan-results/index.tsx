@@ -133,7 +133,7 @@ export default function ScanResultsScreen() {
             {/* Items List */}
             <View style={styles.itemsList}>
               {RECEIPT_DATA.map((item, index) => (
-                <View key={index} style={styles.itemRow}>
+                <View key={index} style={[styles.itemRow, index < RECEIPT_DATA.length - 1 && { marginBottom: 12 }]}>
                   <View style={styles.itemInfo}>
                     <Text style={styles.itemName}>{item.name}</Text>
                     <Text style={styles.itemPrice}>${item.price.toFixed(2)}</Text>
@@ -162,7 +162,7 @@ export default function ScanResultsScreen() {
         {showItems && (
           <Animated.View style={[styles.actionsContainer, { opacity: itemFadeAnim }]}>
             <TouchableOpacity
-              style={styles.primaryButton}
+              style={[styles.primaryButton, { marginBottom: 12 }]}
               onPress={() => setShowShareModal(true)}
             >
               <Text style={styles.primaryButtonText}>Share to Feed</Text>
@@ -333,7 +333,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   itemsList: {
-    gap: 12,
   },
   itemRow: {
     flexDirection: 'row',
@@ -401,7 +400,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   actionsContainer: {
-    gap: 12,
     marginTop: 8,
   },
   primaryButton: {

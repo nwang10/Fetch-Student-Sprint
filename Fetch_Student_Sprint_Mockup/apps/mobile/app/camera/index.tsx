@@ -30,17 +30,8 @@ export default function CameraScreen() {
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
-      onStartShouldSetPanResponderCapture: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponderCapture: () => true,
       onPanResponderGrant: () => {
-        pan.setOffset({
-          x: (pan.x as any)._value,
-          y: (pan.y as any)._value,
-        });
-        pan.setValue({ x: 0, y: 0 });
-
-        // Show drop zone when user starts dragging
+        // Show drop zone immediately when user touches button
         setShowDropZone(true);
         Animated.parallel([
           Animated.timing(dropZoneOpacity, {
@@ -58,24 +49,14 @@ export default function CameraScreen() {
         [null, { dx: pan.x, dy: pan.y }],
         { useNativeDriver: false }
       ),
-      onPanResponderRelease: (evt, gestureState) => {
-        pan.flattenOffset();
+      onPanResponderRelease: () => {
+        const currentY = (pan.y as any)._value;
 
-        // Calculate if button was released inside drop zone
-        const centerX = width / 2;
-        const centerY = height / 2;
-        const buttonCenterX = centerX + gestureState.moveX - width / 2;
-        const buttonCenterY = height - 50 - BUTTON_SIZE / 2 + gestureState.dy;
-
-        const distanceFromCenter = Math.sqrt(
-          Math.pow(buttonCenterX - centerX, 2) + Math.pow(buttonCenterY - centerY, 2)
-        );
-
-        if (distanceFromCenter < DROP_ZONE_SIZE / 2) {
-          // Inside drop zone - start scanning
+        if (currentY < -150) {
+          // Button is in drop zone - start scanning
           handleScan();
         } else {
-          // Outside drop zone - return to original position
+          // Button not in drop zone - return to original position
           Animated.parallel([
             Animated.spring(pan, {
               toValue: { x: 0, y: 0 },

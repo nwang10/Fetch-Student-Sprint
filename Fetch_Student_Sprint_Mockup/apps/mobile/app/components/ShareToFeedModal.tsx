@@ -26,6 +26,7 @@ export default function ShareToFeedModal({
   const slideAnim = new Animated.Value(600);
 
   React.useEffect(() => {
+    console.log('ShareToFeedModal visible:', visible);
     if (visible) {
       Animated.spring(slideAnim, {
         toValue: 0,
@@ -69,6 +70,8 @@ export default function ShareToFeedModal({
     },
   ];
 
+  console.log('Options array length:', options.length);
+
   return (
     <Modal
       visible={visible}
@@ -101,19 +104,16 @@ export default function ShareToFeedModal({
           </View>
 
           {/* Options */}
-          <ScrollView
-            style={styles.optionsContainer}
-            contentContainerStyle={styles.optionsContent}
-            showsVerticalScrollIndicator={false}
-          >
+          <View style={styles.optionsContainer}>
             {options.map((option, index) => (
               <TouchableOpacity
                 key={option.id}
                 style={[
                   styles.optionCard,
-                  { borderColor: option.color + '40' },
+                  { borderColor: option.color + '40', marginBottom: 16 },
                 ]}
                 onPress={() => {
+                  console.log('Option pressed:', option.id);
                   onSelectOption(option.id);
                   onClose();
                 }}
@@ -147,7 +147,7 @@ export default function ShareToFeedModal({
                 </View>
               </TouchableOpacity>
             ))}
-          </ScrollView>
+          </View>
 
           {/* Cancel Button */}
           <TouchableOpacity style={styles.cancelButton} onPress={onClose}>
@@ -202,11 +202,7 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   optionsContainer: {
-    flex: 1,
-  },
-  optionsContent: {
     padding: 20,
-    gap: 16,
   },
   optionCard: {
     backgroundColor: '#FFFFFF',
