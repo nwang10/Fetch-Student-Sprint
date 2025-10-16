@@ -7,9 +7,13 @@ import {
   TouchableOpacity,
   StyleSheet,
   ImageSourcePropType,
+  Alert,
+  ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import Toast from '../components/Toast';
+import * as api from '../../services/api';
 
 // Types
 interface Post {
@@ -22,61 +26,8 @@ interface Post {
   initialLikes: number;
   initialComments: number;
   points: number;
+  createdAt?: string;
 }
-
-// Hardcoded posts data
-const POSTS_DATA: Post[] = [
-  {
-    id: '1',
-    avatar: 'https://i.pravatar.cc/100?img=1',
-    name: 'Emily S.',
-    subline: 'Completed 8 receipts this week',
-    caption: 'Check out my latest grocery haul! 🥑',
-    imageSource: (() => {
-      try {
-        return require('../../assets/exmaple.png');
-      } catch {
-        return { uri: '' };
-      }
-    })(),
-    initialLikes: 24,
-    initialComments: 5,
-    points: 15,
-  },
-  {
-    id: '2',
-    avatar: 'https://i.pravatar.cc/100?img=5',
-    name: 'Marcus T.',
-    subline: 'Top earner this month',
-    caption: 'Just hit 500 points! Who else is crushing it? 🎯',
-    imageSource: { uri: 'https://picsum.photos/seed/groceries2/800/600' },
-    initialLikes: 42,
-    initialComments: 12,
-    points: 25,
-  },
-  {
-    id: '3',
-    avatar: 'https://i.pravatar.cc/100?img=9',
-    name: 'Sarah L.',
-    subline: 'Completed 3 receipts today',
-    caption: 'Healthy shopping spree! Meal prep Sunday 🥗',
-    imageSource: { uri: 'https://picsum.photos/seed/groceries3/800/600' },
-    initialLikes: 18,
-    initialComments: 3,
-    points: 12,
-  },
-  {
-    id: '4',
-    avatar: 'https://i.pravatar.cc/100?img=12',
-    name: 'David K.',
-    subline: 'Completed 15 receipts this week',
-    caption: "Stocked up for the week! Let's go Fetch fam 💪",
-    imageSource: { uri: 'https://picsum.photos/seed/groceries4/800/600' },
-    initialLikes: 31,
-    initialComments: 8,
-    points: 20,
-  },
-];
 
 // Avatar Component
 const Avatar: React.FC<{ uri: string }> = ({ uri }) => (
@@ -92,13 +43,25 @@ const PostHeader: React.FC<{
   avatar: string;
   name: string;
   subline: string;
-}> = ({ avatar, name, subline }) => (
+  onDelete?: () => void;
+  isOwner?: boolean;
+}> = ({ avatar, name, subline, onDelete, isOwner }) => (
   <View style={styles.postHeader}>
     <Avatar uri={avatar} />
     <View style={styles.postHeaderText}>
       <Text style={styles.name}>{name}</Text>
       <Text style={styles.subline}>{subline}</Text>
     </View>
+    {isOwner && onDelete && (
+      <TouchableOpacity
+        onPress={onDelete}
+        style={styles.deleteButton}
+        accessibilityLabel="Delete post"
+        accessibilityRole="button"
+      >
+        <Text style={styles.deleteButtonText}>Delete</Text>
+      </TouchableOpacity>
+    )}
   </View>
 );
 
@@ -172,10 +135,11 @@ const PostFooter: React.FC<{
 );
 
 // Post Card Component
-const PostCard: React.FC<{ post: Post }> = ({ post }) => {
+const PostCard: React.FC<{ post: Post; onDelete: (id: string) => void }> = ({ post, onDelete }) => {
   const [likes, setLikes] = useState(post.initialLikes);
   const [comments, setComments] = useState(post.initialComments);
   const [isLiked, setIsLiked] = useState(false);
+  const isOwner = post.name === 'You';
 
   const handleLike = () => {
     if (isLiked) {
@@ -191,9 +155,49 @@ const PostCard: React.FC<{ post: Post }> = ({ post }) => {
     setComments(comments + 1);
   };
 
+  const handleDelete = () => {
+    console.log('Delete button clicked for post:', post.id);
+
+    // For web, use window.confirm instead of Alert.alert
+    if (Platform.OS === 'web') {
+      if (window.confirm('Are you sure you want to delete this post?')) {
+        console.log('Delete confirmed for post:', post.id);
+        onDelete(post.id);
+      } else {
+        console.log('Delete cancelled');
+      }
+    } else {
+      Alert.alert(
+        'Delete Post',
+        'Are you sure you want to delete this post?',
+        [
+          {
+            text: 'Cancel',
+            style: 'cancel',
+            onPress: () => console.log('Delete cancelled'),
+          },
+          {
+            text: 'Delete',
+            style: 'destructive',
+            onPress: () => {
+              console.log('Delete confirmed for post:', post.id);
+              onDelete(post.id);
+            },
+          },
+        ]
+      );
+    }
+  };
+
   return (
     <View style={styles.postCard}>
-      <PostHeader avatar={post.avatar} name={post.name} subline={post.subline} />
+      <PostHeader
+        avatar={post.avatar}
+        name={post.name}
+        subline={post.subline}
+        onDelete={handleDelete}
+        isOwner={isOwner}
+      />
 
       <View style={styles.caption}>
         <Text style={styles.captionText}>{post.caption}</Text>
@@ -235,11 +239,19 @@ const FeedHeader: React.FC = () => (
 export default function FeedScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const [posts, setPosts] = useState(POSTS_DATA);
+  const [posts, setPosts] = useState<Post[]>([]);
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastEmoji, setToastEmoji] = useState('🎉');
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
+  // Load posts from backend on mount
+  useEffect(() => {
+    loadPosts();
+  }, []);
+
+  // Handle new posts from navigation params
   useEffect(() => {
     if (params.newPost) {
       try {
@@ -251,15 +263,33 @@ export default function FeedScreen() {
     }
   }, [params.newPost]);
 
-  const handleNewPost = (postData: any) => {
-    let newPost: Post;
+  const loadPosts = async () => {
+    try {
+      setLoading(true);
+      const fetchedPosts = await api.fetchPosts();
+      setPosts(fetchedPosts);
+    } catch (error) {
+      console.error('Failed to load posts:', error);
+      Alert.alert('Error', 'Failed to load posts. Make sure the backend server is running.');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    loadPosts();
+  };
+
+  const handleNewPost = async (postData: any) => {
+    let newPost: Omit<Post, 'id' | 'createdAt'>;
     let points = 0;
     let emoji = '🎉';
 
     if (postData.type === 'haul') {
       points = postData.shareExternal ? 35 : 25;
       newPost = {
-        id: Date.now().toString(),
         avatar: 'https://i.pravatar.cc/100?img=50',
         name: 'You',
         subline: 'Just posted',
@@ -274,7 +304,6 @@ export default function FeedScreen() {
     } else if (postData.type === 'roast') {
       points = postData.shareExternal ? 40 : 30;
       newPost = {
-        id: Date.now().toString(),
         avatar: 'https://i.pravatar.cc/100?img=50',
         name: 'You',
         subline: 'AI Roasted their receipt',
@@ -289,7 +318,6 @@ export default function FeedScreen() {
     } else if (postData.type === 'review') {
       points = postData.shareExternal ? 50 : 40;
       newPost = {
-        id: Date.now().toString(),
         avatar: 'https://i.pravatar.cc/100?img=50',
         name: 'You',
         subline: 'Reviewed a product',
@@ -305,19 +333,62 @@ export default function FeedScreen() {
       return;
     }
 
-    // Add post to the top of the feed
-    setPosts([newPost, ...posts]);
-    setShowToast(true);
+    // Create post in backend
+    try {
+      await api.createPost(newPost);
+      // Reload all posts from backend to show full feed
+      await loadPosts();
+      setShowToast(true);
 
-    // Show bonus toast if external share
-    if (postData.shareExternal) {
-      setTimeout(() => {
-        setToastMessage('Shared externally! +10 bonus points.');
-        setToastEmoji('🚀');
-        setShowToast(true);
-      }, 3500);
+      // Show bonus toast if external share
+      if (postData.shareExternal) {
+        setTimeout(() => {
+          setToastMessage('Shared externally! +10 bonus points.');
+          setToastEmoji('🚀');
+          setShowToast(true);
+        }, 3500);
+      }
+    } catch (error) {
+      console.error('Failed to create post:', error);
+      Alert.alert('Error', 'Failed to create post. Please try again.');
     }
   };
+
+  const handleDeletePost = async (id: string) => {
+    console.log('handleDeletePost called with id:', id);
+    console.log('Current posts count:', posts.length);
+
+    try {
+      console.log('Calling API to delete post:', id);
+      await api.deletePost(id);
+      console.log('API delete successful, updating local state');
+
+      const updatedPosts = posts.filter(post => post.id !== id);
+      console.log('Updated posts count:', updatedPosts.length);
+
+      setPosts(updatedPosts);
+      setToastMessage('Post deleted successfully');
+      setToastEmoji('🗑️');
+      setShowToast(true);
+      console.log('Delete completed successfully');
+    } catch (error) {
+      console.error('Failed to delete post:', error);
+      if (Platform.OS === 'web') {
+        alert('Error: Failed to delete post. Please try again.');
+      } else {
+        Alert.alert('Error', 'Failed to delete post. Please try again.');
+      }
+    }
+  };
+
+  if (loading) {
+    return (
+      <View style={[styles.container, styles.centerContent]}>
+        <ActivityIndicator size="large" color="#7C3AED" />
+        <Text style={styles.loadingText}>Loading posts...</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -325,9 +396,11 @@ export default function FeedScreen() {
       <FlatList
         data={posts}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => <PostCard post={item} />}
+        renderItem={({ item }) => <PostCard post={item} onDelete={handleDeletePost} />}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
+        refreshing={refreshing}
+        onRefresh={handleRefresh}
       />
 
       {/* Camera Button */}
@@ -355,6 +428,15 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F9FAFB',
+  },
+  centerContent: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#6B7280',
   },
   header: {
     backgroundColor: '#FFFFFF',
@@ -426,6 +508,22 @@ const styles = StyleSheet.create({
   postHeaderText: {
     marginLeft: 12,
     flex: 1,
+  },
+  deleteButton: {
+    backgroundColor: '#EF4444',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  deleteButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
   },
   name: {
     fontSize: 16,
