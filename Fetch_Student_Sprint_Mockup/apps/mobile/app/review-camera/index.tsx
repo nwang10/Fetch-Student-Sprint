@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   Animated,
   Platform,
+  Image,
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -24,52 +25,90 @@ export default function ReviewCameraScreen() {
   const [recordingTime, setRecordingTime] = useState(0);
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
+  const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
   const startRecording = async () => {
-    if (mode === 'video' && cameraRef.current) {
-      setIsRecording(true);
-      recordingTimer.current = 0;
+    if (mode === 'video' && cameraRef.current && Platform.OS !== 'web') {
+      try {
+        setIsRecording(true);
+        recordingTimer.current = 0;
 
-      // Start pulse animation
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, {
-            toValue: 1.2,
-            duration: 500,
-            useNativeDriver: true,
-          }),
-          Animated.timing(pulseAnim, {
-            toValue: 1,
-            duration: 500,
-            useNativeDriver: true,
-          }),
-        ])
-      ).start();
+        // Start pulse animation
+        Animated.loop(
+          Animated.sequence([
+            Animated.timing(pulseAnim, {
+              toValue: 1.2,
+              duration: 500,
+              useNativeDriver: true,
+            }),
+            Animated.timing(pulseAnim, {
+              toValue: 1,
+              duration: 500,
+              useNativeDriver: true,
+            }),
+          ])
+        ).start();
 
-      // Simulate recording timer
-      const timer = setInterval(() => {
-        recordingTimer.current += 1;
-        setRecordingTime(recordingTimer.current);
-      }, 1000);
+        // Start recording timer
+        timerIntervalRef.current = setInterval(() => {
+          recordingTimer.current += 1;
+          setRecordingTime(recordingTimer.current);
+        }, 1000);
 
-      // Auto-stop after 30 seconds
-      setTimeout(() => {
-        stopRecording();
-        clearInterval(timer);
-      }, 30000);
+        // Start actual video recording - this will resolve when recording stops
+        const video = await cameraRef.current.recordAsync({
+          maxDuration: 30,
+        });
+
+        // Recording finished (either by stopRecording or maxDuration)
+        if (video && video.uri) {
+          setCapturedMedia(video.uri);
+        }
+      } catch (error) {
+        console.error('Error recording video:', error);
+        setIsRecording(false);
+        if (timerIntervalRef.current) {
+          clearInterval(timerIntervalRef.current);
+          timerIntervalRef.current = null;
+        }
+      }
     }
   };
 
   const stopRecording = () => {
+    if (cameraRef.current && isRecording && Platform.OS !== 'web') {
+      cameraRef.current.stopRecording();
+    }
+
     setIsRecording(false);
     pulseAnim.stopAnimation();
     pulseAnim.setValue(1);
-    // Simulate captured video
-    setCapturedMedia('https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4');
+
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current);
+      timerIntervalRef.current = null;
+    }
+
+    // For web fallback
+    if (Platform.OS === 'web') {
+      setCapturedMedia('https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4');
+    }
   };
 
-  const takePhoto = () => {
-    // Simulate photo capture
-    setCapturedMedia('https://picsum.photos/seed/review-photo/800/600');
+  const takePhoto = async () => {
+    if (cameraRef.current && Platform.OS !== 'web') {
+      try {
+        const photo = await cameraRef.current.takePictureAsync({
+          quality: 0.8,
+        });
+        setCapturedMedia(photo.uri);
+      } catch (error) {
+        console.error('Error taking picture:', error);
+      }
+    } else if (Platform.OS === 'web') {
+      // Fallback for web
+      setCapturedMedia('https://picsum.photos/seed/review-photo/800/600');
+    }
   };
 
   const handleUseMedia = () => {
@@ -78,6 +117,11 @@ export default function ReviewCameraScreen() {
       params: {
         media: capturedMedia,
         mediaType: mode,
+        // Pass back the form data that was preserved
+        selectedItemId: params.selectedItemId,
+        rating: params.rating,
+        reviewText: params.reviewText,
+        shareExternal: params.shareExternal,
       },
     });
   };
@@ -142,9 +186,11 @@ export default function ReviewCameraScreen() {
               isLooping
             />
           ) : (
-            <View style={styles.previewMedia}>
-              <Text style={styles.previewPlaceholder}>📸 Photo Preview</Text>
-            </View>
+            <Image
+              source={{ uri: capturedMedia }}
+              style={styles.previewMedia}
+              resizeMode="contain"
+            />
           )}
         </View>
       ) : (

@@ -3,6 +3,7 @@ const cors = require('cors');
 const bodyParser = require('body-parser');
 const fs = require('fs');
 const path = require('path');
+const https = require('https');
 
 const app = express();
 const PORT = 3000;
@@ -27,7 +28,8 @@ if (!fs.existsSync(DB_FILE)) {
         initialLikes: 24,
         initialComments: 5,
         points: 15,
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        comments: []
       },
       {
         id: '2',
@@ -39,7 +41,8 @@ if (!fs.existsSync(DB_FILE)) {
         initialLikes: 42,
         initialComments: 12,
         points: 25,
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        comments: []
       },
       {
         id: '3',
@@ -51,7 +54,8 @@ if (!fs.existsSync(DB_FILE)) {
         initialLikes: 18,
         initialComments: 3,
         points: 12,
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        comments: []
       },
       {
         id: '4',
@@ -63,7 +67,8 @@ if (!fs.existsSync(DB_FILE)) {
         initialLikes: 31,
         initialComments: 8,
         points: 20,
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        comments: []
       }
     ]
   };
@@ -158,20 +163,265 @@ app.delete('/api/posts/:id', (req, res) => {
   }
 });
 
+// ADD comment to post
+app.post('/api/posts/:id/comments', (req, res) => {
+  try {
+    const db = readDB();
+    const postIndex = db.posts.findIndex(p => p.id === req.params.id);
+
+    if (postIndex === -1) {
+      return res.status(404).json({ success: false, error: 'Post not found' });
+    }
+
+    const newComment = {
+      ...req.body,
+      id: Date.now().toString(),
+      createdAt: new Date().toISOString(),
+      replies: req.body.replies || []
+    };
+
+    if (!db.posts[postIndex].comments) {
+      db.posts[postIndex].comments = [];
+    }
+
+    const { parentId } = req.body;
+
+    if (parentId) {
+      // Add as reply to parent comment at any nesting level
+      const addReplyToComment = (comments) => {
+        return comments.map(comment => {
+          if (comment.id === parentId) {
+            return {
+              ...comment,
+              replies: [...(comment.replies || []), newComment]
+            };
+          }
+          // Recursively check nested replies
+          if (comment.replies && comment.replies.length > 0) {
+            return {
+              ...comment,
+              replies: addReplyToComment(comment.replies)
+            };
+          }
+          return comment;
+        });
+      };
+
+      db.posts[postIndex].comments = addReplyToComment(db.posts[postIndex].comments);
+    } else {
+      // Add as top-level comment
+      db.posts[postIndex].comments.unshift(newComment);
+    }
+
+    writeDB(db);
+
+    res.status(201).json({ success: true, comment: newComment });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// DELETE comment from post
+app.delete('/api/posts/:postId/comments/:commentId', (req, res) => {
+  try {
+    const db = readDB();
+    const postIndex = db.posts.findIndex(p => p.id === req.params.postId);
+
+    if (postIndex === -1) {
+      return res.status(404).json({ success: false, error: 'Post not found' });
+    }
+
+    if (!db.posts[postIndex].comments) {
+      return res.status(404).json({ success: false, error: 'Comment not found' });
+    }
+
+    // Helper function to recursively delete comment and its replies
+    const deleteCommentById = (comments) => {
+      return comments
+        .filter(c => c.id !== req.params.commentId)
+        .map(comment => ({
+          ...comment,
+          replies: comment.replies ? deleteCommentById(comment.replies) : []
+        }));
+    };
+
+    db.posts[postIndex].comments = deleteCommentById(db.posts[postIndex].comments);
+    writeDB(db);
+
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// LIKE/UNLIKE comment
+app.put('/api/posts/:postId/comments/:commentId/like', (req, res) => {
+  try {
+    const db = readDB();
+    const postIndex = db.posts.findIndex(p => p.id === req.params.postId);
+
+    if (postIndex === -1) {
+      return res.status(404).json({ success: false, error: 'Post not found' });
+    }
+
+    if (!db.posts[postIndex].comments) {
+      return res.status(404).json({ success: false, error: 'Comment not found' });
+    }
+
+    // Helper function to recursively update likes
+    const toggleLikeById = (comments) => {
+      return comments.map(comment => {
+        if (comment.id === req.params.commentId) {
+          return {
+            ...comment,
+            isLiked: !comment.isLiked,
+            likes: comment.isLiked ? (comment.likes || 1) - 1 : (comment.likes || 0) + 1
+          };
+        }
+        if (comment.replies && comment.replies.length > 0) {
+          return {
+            ...comment,
+            replies: toggleLikeById(comment.replies)
+          };
+        }
+        return comment;
+      });
+    };
+
+    db.posts[postIndex].comments = toggleLikeById(db.posts[postIndex].comments);
+    writeDB(db);
+
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Generate AI Roast Video
+app.post('/api/generate-roast-video', async (req, res) => {
+  try {
+    const { roastText, receiptItems } = req.body;
+
+    if (!roastText) {
+      return res.status(400).json({ success: false, error: 'Roast text is required' });
+    }
+
+    // For demo purposes, we'll use OpenAI's TTS API to generate speech
+    // You would need an OpenAI API key for this to work
+    const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
+
+    if (!OPENAI_API_KEY) {
+      // If no API key, return a placeholder video URL
+      console.log('No OpenAI API key found. Using placeholder video.');
+      return res.json({
+        success: true,
+        videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4',
+        message: 'Using placeholder video. Set OPENAI_API_KEY environment variable for AI-generated videos.'
+      });
+    }
+
+    // Prepare the roast script for TTS
+    const roastScript = `Hey there! Let me roast this receipt for you. ${roastText}`;
+
+    // Call OpenAI TTS API to generate audio
+    const postData = JSON.stringify({
+      model: 'tts-1',
+      voice: 'alloy', // or 'echo', 'fable', 'onyx', 'nova', 'shimmer'
+      input: roastScript,
+      speed: 1.0
+    });
+
+    const options = {
+      hostname: 'api.openai.com',
+      port: 443,
+      path: '/v1/audio/speech',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        'Content-Length': Buffer.byteLength(postData)
+      }
+    };
+
+    // Make request to OpenAI
+    const openaiRequest = https.request(options, (openaiRes) => {
+      const audioChunks = [];
+
+      openaiRes.on('data', (chunk) => {
+        audioChunks.push(chunk);
+      });
+
+      openaiRes.on('end', () => {
+        if (openaiRes.statusCode === 200) {
+          const audioBuffer = Buffer.concat(audioChunks);
+
+          // Save audio file temporarily
+          const audioFileName = `roast_${Date.now()}.mp3`;
+          const audioPath = path.join(__dirname, 'temp', audioFileName);
+
+          // Create temp directory if it doesn't exist
+          if (!fs.existsSync(path.join(__dirname, 'temp'))) {
+            fs.mkdirSync(path.join(__dirname, 'temp'));
+          }
+
+          fs.writeFileSync(audioPath, audioBuffer);
+
+          // For now, we'll just return the audio URL
+          // In a full implementation, you would use FFmpeg to create a video with the audio
+          // and animated text/visuals
+          res.json({
+            success: true,
+            audioUrl: `/api/temp/${audioFileName}`,
+            videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4',
+            message: 'AI audio generated successfully. Video generation would require FFmpeg integration.'
+          });
+        } else {
+          console.error('OpenAI API error:', openaiRes.statusCode);
+          res.status(500).json({
+            success: false,
+            error: 'Failed to generate AI audio',
+            details: openaiRes.statusCode
+          });
+        }
+      });
+    });
+
+    openaiRequest.on('error', (error) => {
+      console.error('Error calling OpenAI API:', error);
+      res.status(500).json({ success: false, error: 'Failed to generate AI video' });
+    });
+
+    openaiRequest.write(postData);
+    openaiRequest.end();
+
+  } catch (error) {
+    console.error('Error generating roast video:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Serve temp files (for audio/video)
+app.use('/api/temp', express.static(path.join(__dirname, 'temp')));
+
 // Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Start server
-app.listen(PORT, () => {
+// Start server - Listen on 0.0.0.0 to accept connections from mobile devices
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Fetch Backend Server running on http://localhost:${PORT}`);
+  console.log(`📱 Mobile devices can connect via your computer's IP address`);
   console.log(`📊 Database: ${DB_FILE}`);
   console.log(`\nAvailable endpoints:`);
-  console.log(`  GET    /api/posts       - Get all posts`);
-  console.log(`  GET    /api/posts/:id   - Get single post`);
-  console.log(`  POST   /api/posts       - Create new post`);
-  console.log(`  PUT    /api/posts/:id   - Update post`);
-  console.log(`  DELETE /api/posts/:id   - Delete post`);
-  console.log(`  GET    /health          - Health check\n`);
+  console.log(`  GET    /api/posts                              - Get all posts`);
+  console.log(`  GET    /api/posts/:id                          - Get single post`);
+  console.log(`  POST   /api/posts                              - Create new post`);
+  console.log(`  PUT    /api/posts/:id                          - Update post`);
+  console.log(`  DELETE /api/posts/:id                          - Delete post`);
+  console.log(`  POST   /api/posts/:id/comments                 - Add comment to post`);
+  console.log(`  DELETE /api/posts/:postId/comments/:commentId  - Delete comment`);
+  console.log(`  PUT    /api/posts/:postId/comments/:commentId/like - Like/unlike comment`);
+  console.log(`  POST   /api/generate-roast-video               - Generate AI roast video`);
+  console.log(`  GET    /health                                 - Health check\n`);
 });

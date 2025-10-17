@@ -13,9 +13,24 @@ import {
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import Toast from '../components/Toast';
+import CommentsModal from '../components/CommentsModal';
+import RoastImage from '../components/RoastImage';
 import * as api from '../../services/api';
 
 // Types
+interface Comment {
+  id: string;
+  avatar: string;
+  name: string;
+  text: string;
+  likes: number;
+  isLiked: boolean;
+  isOwner: boolean;
+  replies: Comment[];
+  createdAt: string;
+  parentId?: string;
+}
+
 interface Post {
   id: string;
   avatar: string;
@@ -27,6 +42,12 @@ interface Post {
   initialComments: number;
   points: number;
   createdAt?: string;
+  comments?: Comment[];
+  // Roast-specific fields
+  isRoast?: boolean;
+  roastText?: string;
+  roastEmoji?: string;
+  receiptItems?: Array<{ name: string; price: number }>;
 }
 
 // Avatar Component
@@ -135,11 +156,31 @@ const PostFooter: React.FC<{
 );
 
 // Post Card Component
-const PostCard: React.FC<{ post: Post; onDelete: (id: string) => void }> = ({ post, onDelete }) => {
+const PostCard: React.FC<{
+  post: Post;
+  onDelete: (id: string) => void;
+  onOpenComments: (post: Post) => void;
+}> = ({ post, onDelete, onOpenComments }) => {
   const [likes, setLikes] = useState(post.initialLikes);
-  const [comments, setComments] = useState(post.initialComments);
+  const [commentsCount, setCommentsCount] = useState(post.initialComments);
   const [isLiked, setIsLiked] = useState(false);
   const isOwner = post.name === 'You';
+
+  // Update comments count when post.comments changes
+  useEffect(() => {
+    if (post.comments) {
+      // Recursive function to count all comments and nested replies
+      const countAllComments = (comments: Comment[]): number => {
+        return comments.reduce((sum, comment) => {
+          // Count this comment + all its nested replies recursively
+          return sum + 1 + countAllComments(comment.replies || []);
+        }, 0);
+      };
+
+      const totalComments = countAllComments(post.comments);
+      setCommentsCount(totalComments);
+    }
+  }, [post.comments]);
 
   const handleLike = () => {
     if (isLiked) {
@@ -152,7 +193,7 @@ const PostCard: React.FC<{ post: Post; onDelete: (id: string) => void }> = ({ po
   };
 
   const handleComment = () => {
-    setComments(comments + 1);
+    onOpenComments(post);
   };
 
   const handleDelete = () => {
@@ -203,11 +244,19 @@ const PostCard: React.FC<{ post: Post; onDelete: (id: string) => void }> = ({ po
         <Text style={styles.captionText}>{post.caption}</Text>
       </View>
 
-      <PostImage source={post.imageSource} />
+      {post.isRoast && post.roastText ? (
+        <RoastImage
+          roastText={post.roastText}
+          roastEmoji={post.roastEmoji}
+          receiptItems={post.receiptItems}
+        />
+      ) : (
+        <PostImage source={post.imageSource} />
+      )}
 
       <PostFooter
         likes={likes}
-        comments={comments}
+        comments={commentsCount}
         points={post.points}
         onLike={handleLike}
         onComment={handleComment}
@@ -245,6 +294,8 @@ export default function FeedScreen() {
   const [toastEmoji, setToastEmoji] = useState('🎉');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedPost, setSelectedPost] = useState<Post | null>(null);
+  const [showCommentsModal, setShowCommentsModal] = useState(false);
 
   // Load posts from backend on mount
   useEffect(() => {
@@ -289,12 +340,13 @@ export default function FeedScreen() {
 
     if (postData.type === 'haul') {
       points = postData.shareExternal ? 35 : 25;
+      const mediaUri = postData.media || postData.image; // Support both new and old format
       newPost = {
         avatar: 'https://i.pravatar.cc/100?img=50',
         name: 'You',
-        subline: 'Just posted',
+        subline: postData.mediaType === 'video' ? 'Shared a haul video' : 'Just posted',
         caption: postData.caption,
-        imageSource: { uri: postData.image },
+        imageSource: { uri: mediaUri },
         initialLikes: 0,
         initialComments: 0,
         points,
@@ -303,18 +355,39 @@ export default function FeedScreen() {
       setToastEmoji('🎉');
     } else if (postData.type === 'roast') {
       points = postData.shareExternal ? 40 : 30;
+      // Receipt items from scan - hardcoded junk food
+      const receiptItems = [
+        { name: 'Oreos (Family Size)', price: 5.99 },
+        { name: 'Doritos Cool Ranch', price: 4.49 },
+        { name: 'Pringles Original', price: 2.99 },
+        { name: 'Chips Ahoy Cookies', price: 4.29 },
+        { name: 'Coca-Cola (12-pack)', price: 6.99 },
+        { name: 'Mountain Dew (2 Liter)', price: 2.49 },
+        { name: 'Cheetos Flamin Hot', price: 3.99 },
+        { name: 'Pop-Tarts Frosted Strawberry', price: 4.79 },
+        { name: 'Reeses Peanut Butter Cups', price: 1.99 },
+        { name: 'Hostess Twinkies', price: 4.49 },
+        { name: 'Little Debbie Swiss Rolls', price: 3.29 },
+        { name: 'Hot Cheetos (Party Size)', price: 5.49 },
+      ];
+
       newPost = {
         avatar: 'https://i.pravatar.cc/100?img=50',
         name: 'You',
-        subline: 'AI Roasted their receipt',
-        caption: `${postData.roastEmoji} ${postData.roastText}`,
-        imageSource: { uri: 'https://picsum.photos/seed/roast/800/600' },
+        subline: 'AI Roasted their receipt 🔥',
+        caption: `${postData.roastText}`,
+        imageSource: { uri: '' }, // Not used for roast posts
         initialLikes: 0,
         initialComments: 0,
         points,
+        // Roast-specific data
+        isRoast: true,
+        roastText: postData.roastText,
+        roastEmoji: postData.roastEmoji,
+        receiptItems,
       };
       setToastMessage(`Your Roast is live! +${points} Fetch Points earned.`);
-      setToastEmoji('😂');
+      setToastEmoji('🔥');
     } else if (postData.type === 'review') {
       points = postData.shareExternal ? 50 : 40;
       newPost = {
@@ -322,7 +395,7 @@ export default function FeedScreen() {
         name: 'You',
         subline: 'Reviewed a product',
         caption: `${'⭐'.repeat(postData.rating)} ${postData.productName}\n"${postData.reviewText}"`,
-        imageSource: { uri: 'https://picsum.photos/seed/review/800/600' },
+        imageSource: postData.media ? { uri: postData.media } : { uri: 'https://picsum.photos/seed/review/800/600' },
         initialLikes: 0,
         initialComments: 0,
         points,
@@ -381,6 +454,183 @@ export default function FeedScreen() {
     }
   };
 
+  const handleOpenComments = (post: Post) => {
+    setSelectedPost(post);
+    setShowCommentsModal(true);
+  };
+
+  const handleCloseComments = () => {
+    setShowCommentsModal(false);
+    setSelectedPost(null);
+  };
+
+  const handleAddComment = async (postId: string, commentText: string, parentId?: string): Promise<Comment> => {
+    try {
+      // Create comment data to send to backend
+      const commentData = {
+        avatar: 'https://i.pravatar.cc/100?img=50',
+        name: 'You',
+        text: commentText,
+        likes: 0,
+        isLiked: false,
+        isOwner: true,
+        parentId,
+      };
+
+      // Add comment to backend
+      const newComment = await api.addComment(postId, commentData);
+
+      // Helper function to recursively add reply to parent at any level
+      const addReplyToParent = (comments: Comment[]): Comment[] => {
+        return comments.map(comment => {
+          if (comment.id === parentId) {
+            return { ...comment, replies: [...comment.replies, newComment] };
+          }
+          if (comment.replies.length > 0) {
+            return { ...comment, replies: addReplyToParent(comment.replies) };
+          }
+          return comment;
+        });
+      };
+
+      // Update local state - handle replies properly
+      setPosts(prevPosts =>
+        prevPosts.map(post => {
+          if (post.id === postId) {
+            const comments = post.comments || [];
+
+            if (parentId) {
+              // Add as reply to parent comment at any nesting level
+              return {
+                ...post,
+                comments: addReplyToParent(comments)
+              };
+            } else {
+              // Add as top-level comment
+              return { ...post, comments: [newComment, ...comments] };
+            }
+          }
+          return post;
+        })
+      );
+
+      // Update selected post for modal
+      if (selectedPost && selectedPost.id === postId) {
+        setSelectedPost(prev => {
+          if (!prev) return prev;
+          const comments = prev.comments || [];
+
+          if (parentId) {
+            // Add as reply to parent comment at any nesting level
+            return {
+              ...prev,
+              comments: addReplyToParent(comments)
+            };
+          } else {
+            // Add as top-level comment
+            return { ...prev, comments: [newComment, ...comments] };
+          }
+        });
+      }
+
+      return newComment;
+    } catch (error) {
+      console.error('Failed to add comment:', error);
+      throw error;
+    }
+  };
+
+  const handleDeleteComment = async (postId: string, commentId: string): Promise<void> => {
+    try {
+      // Delete comment from backend
+      await api.deleteComment(postId, commentId);
+
+      // Helper function to recursively delete comment and its replies
+      const deleteCommentAndReplies = (comments: Comment[]): Comment[] => {
+        return comments
+          .filter(c => c.id !== commentId)
+          .map(comment => ({
+            ...comment,
+            replies: comment.replies.filter(r => r.id !== commentId)
+          }));
+      };
+
+      // Update local state
+      setPosts(prevPosts =>
+        prevPosts.map(post => {
+          if (post.id === postId) {
+            const comments = deleteCommentAndReplies(post.comments || []);
+            return { ...post, comments };
+          }
+          return post;
+        })
+      );
+
+      // Update selected post for modal
+      if (selectedPost && selectedPost.id === postId) {
+        setSelectedPost(prev => {
+          if (!prev) return prev;
+          const comments = deleteCommentAndReplies(prev.comments || []);
+          return { ...prev, comments };
+        });
+      }
+    } catch (error) {
+      console.error('Failed to delete comment:', error);
+      throw error;
+    }
+  };
+
+  const handleLikeComment = async (postId: string, commentId: string): Promise<void> => {
+    try {
+      // Like/unlike comment on backend
+      await api.likeComment(postId, commentId);
+
+      // Helper function to recursively update likes
+      const updateCommentLikes = (comments: Comment[]): Comment[] => {
+        return comments.map(comment => {
+          if (comment.id === commentId) {
+            return {
+              ...comment,
+              isLiked: !comment.isLiked,
+              likes: comment.isLiked ? comment.likes - 1 : comment.likes + 1,
+            };
+          }
+          // Check replies
+          if (comment.replies.length > 0) {
+            return {
+              ...comment,
+              replies: updateCommentLikes(comment.replies)
+            };
+          }
+          return comment;
+        });
+      };
+
+      // Update local state
+      setPosts(prevPosts =>
+        prevPosts.map(post => {
+          if (post.id === postId) {
+            const comments = updateCommentLikes(post.comments || []);
+            return { ...post, comments };
+          }
+          return post;
+        })
+      );
+
+      // Update selected post for modal
+      if (selectedPost && selectedPost.id === postId) {
+        setSelectedPost(prev => {
+          if (!prev) return prev;
+          const comments = updateCommentLikes(prev.comments || []);
+          return { ...prev, comments };
+        });
+      }
+    } catch (error) {
+      console.error('Failed to like comment:', error);
+      throw error;
+    }
+  };
+
   if (loading) {
     return (
       <View style={[styles.container, styles.centerContent]}>
@@ -396,7 +646,13 @@ export default function FeedScreen() {
       <FlatList
         data={posts}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => <PostCard post={item} onDelete={handleDeletePost} />}
+        renderItem={({ item }) => (
+          <PostCard
+            post={item}
+            onDelete={handleDeletePost}
+            onOpenComments={handleOpenComments}
+          />
+        )}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         refreshing={refreshing}
@@ -412,6 +668,23 @@ export default function FeedScreen() {
       >
         <Text style={styles.cameraEmoji}>📷</Text>
       </TouchableOpacity>
+
+      {/* Comments Modal */}
+      {selectedPost && (
+        <CommentsModal
+          visible={showCommentsModal}
+          onClose={handleCloseComments}
+          postId={selectedPost.id}
+          initialComments={selectedPost.comments || []}
+          onAddComment={handleAddComment}
+          onDeleteComment={handleDeleteComment}
+          onLikeComment={handleLikeComment}
+          postAvatar={selectedPost.avatar}
+          postName={selectedPost.name}
+          postCaption={selectedPost.caption}
+          postImage={selectedPost.imageSource}
+        />
+      )}
 
       {/* Toast */}
       <Toast

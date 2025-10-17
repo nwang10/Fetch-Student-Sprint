@@ -37,18 +37,41 @@ export default function ShareReviewScreen() {
   const [media, setMedia] = useState<string | null>(null);
   const [mediaType, setMediaType] = useState<'photo' | 'video' | null>(null);
 
-  // Handle media returned from review-camera
+  // Handle media returned from review-camera and restore form data
   useEffect(() => {
     if (params.media && params.mediaType) {
       setMedia(params.media as string);
       setMediaType(params.mediaType as 'photo' | 'video');
     }
-  }, [params.media, params.mediaType]);
+
+    // Restore form data from params if returning from camera
+    if (params.selectedItemId) {
+      const item = RECEIPT_ITEMS.find(i => i.id === Number(params.selectedItemId));
+      if (item) setSelectedItem(item);
+    }
+    if (params.rating) {
+      setRating(Number(params.rating));
+    }
+    if (params.reviewText) {
+      setReviewText(params.reviewText as string);
+    }
+    if (params.shareExternal) {
+      setShareExternal(params.shareExternal === 'true');
+    }
+  }, [params.media, params.mediaType, params.selectedItemId, params.rating, params.reviewText, params.shareExternal]);
 
   const openCamera = (mode: 'photo' | 'video') => {
+    // Save current form state before navigating to camera
     router.push({
       pathname: '/review-camera',
-      params: { mode },
+      params: {
+        mode,
+        // Pass current form data to preserve it
+        selectedItemId: selectedItem.id.toString(),
+        rating: rating.toString(),
+        reviewText,
+        shareExternal: shareExternal.toString(),
+      },
     });
   };
 
