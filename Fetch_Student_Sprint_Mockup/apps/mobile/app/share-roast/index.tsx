@@ -9,24 +9,9 @@ import {
   Animated,
   Dimensions,
 } from 'react-native';
-import { useRouter } from 'expo-router';
-import { Video, ResizeMode } from 'expo-av';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 
 const { width } = Dimensions.get('window');
-
-// Receipt items from scan
-const RECEIPT_ITEMS = [
-  { name: 'Organic Bananas', price: 3.49 },
-  { name: 'Whole Milk (1 Gallon)', price: 4.99 },
-  { name: 'Greek Yogurt', price: 5.99 },
-  { name: 'Bread - Whole Wheat', price: 3.29 },
-  { name: 'Eggs (Dozen)', price: 4.49 },
-  { name: 'Orange Juice', price: 5.49 },
-  { name: 'Chicken Breast (2 lbs)', price: 12.99 },
-  { name: 'Mixed Salad Greens', price: 4.29 },
-  { name: 'Tomatoes', price: 3.99 },
-  { name: 'Pasta - Penne', price: 2.49 },
-];
 
 interface Roast {
   id: number;
@@ -36,129 +21,569 @@ interface Roast {
 }
 
 // AI Roast Generator - analyzes receipt contents
-function generateRoasts(): Roast[] {
+function generateRoasts(receiptItems: Array<{ name: string; price: number }>): Roast[] {
   const roasts: Roast[] = [];
-  const totalPrice = RECEIPT_ITEMS.reduce((sum, item) => sum + item.price, 0);
-  const itemNames = RECEIPT_ITEMS.map(item => item.name.toLowerCase());
+  const totalPrice = receiptItems.reduce((sum, item) => sum + item.price, 0);
+  const itemNames = receiptItems.map(item => item.name.toLowerCase());
 
-  // Roast #1: Check for expensive items
-  const expensiveItem = RECEIPT_ITEMS.find(item => item.price > 10);
-  if (expensiveItem) {
+  // Detect receipt type
+  const proteinKeywords = ['protein', 'whey', 'muscle', 'pre-workout', 'preworkout', 'creatine'];
+  const proteinCount = itemNames.filter(name =>
+    proteinKeywords.some(keyword => name.includes(keyword))
+  ).length;
+
+  const bulkFoodKeywords = ['gallon', 'lbs', 'pound', 'dozen', 'loaves', 'loaf'];
+  const bulkCount = itemNames.filter(name =>
+    bulkFoodKeywords.some(keyword => name.includes(keyword))
+  ).length;
+
+  const beautyKeywords = ['makeup', 'mascara', 'lipstick', 'foundation', 'moisturizer', 'lotion', 'nail polish', 'serum', 'face mask'];
+  const beautyCount = itemNames.filter(name =>
+    beautyKeywords.some(keyword => name.includes(keyword))
+  ).length;
+
+  const energyKeywords = ['monster', 'red bull', 'energy', '5 hour', 'taquito', 'hot dog', 'slurpee'];
+  const energyCount = itemNames.filter(name =>
+    energyKeywords.some(keyword => name.includes(keyword))
+  ).length;
+
+  const isGymReceipt = proteinCount >= 2;
+  const isBulkReceipt = bulkCount >= 3 || receiptItems.length >= 15;
+  const isBeautyReceipt = beautyCount >= 3;
+  const isLateNightReceipt = energyCount >= 2;
+
+  // GYM RECEIPT ROASTS
+  if (isGymReceipt) {
+    // Protein overload roast
+    if (proteinCount >= 3) {
+      roasts.push({
+        id: 1,
+        text: `${proteinCount} protein products? Bro, you're gonna turn into a protein shake! 💪`,
+        emoji: "💪",
+        color: "#F59E0B",
+      });
+    }
+
+    // Pre-workout roast
+    if (itemNames.some(name => name.includes('pre-workout') || name.includes('c4'))) {
+      roasts.push({
+        id: 2,
+        text: `Pre-workout? Your heart rate's gonna be higher than your credit score! ⚡`,
+        emoji: "⚡",
+        color: "#EF4444",
+      });
+    }
+
+    // Protein bar roast
+    const proteinBarCount = itemNames.filter(name =>
+      name.includes('bar') || name.includes('quest') || name.includes('built')
+    ).length;
+    if (proteinBarCount >= 2) {
+      roasts.push({
+        id: 3,
+        text: `${proteinBarCount} types of protein bars? Meal prep = just unwrapping different flavors 🍫`,
+        emoji: "🍫",
+        color: "#8B5CF6",
+      });
+    }
+
+    // Resistance bands roast
+    if (itemNames.some(name => name.includes('band') || name.includes('strap'))) {
+      roasts.push({
+        id: 4,
+        text: `Wrist straps AND resistance bands? Someone's skipping leg day at the gym AND at home! 🦵`,
+        emoji: "🏋️",
+        color: "#3B82F6",
+      });
+    }
+
+    // Protein ice cream/desserts
+    if (itemNames.some(name => name.includes('halo top') || name.includes('yasso') || name.includes('ice cream'))) {
+      roasts.push({
+        id: 5,
+        text: `"Healthy" ice cream? Just admit you want dessert and stop lying to yourself! 🍦`,
+        emoji: "🍦",
+        color: "#EC4899",
+      });
+    }
+
+    // Total price for gym stuff
+    if (totalPrice > 150) {
+      roasts.push({
+        id: 6,
+        text: `$${totalPrice.toFixed(2)} on supplements? That's a gym membership AND a personal trainer! 💸`,
+        emoji: "💸",
+        color: "#10B981",
+      });
+    } else if (totalPrice > 200) {
+      roasts.push({
+        id: 7,
+        text: `$${totalPrice.toFixed(2)}!? You're not building muscle, you're building DEBT! 📉`,
+        emoji: "📉",
+        color: "#DC2626",
+      });
+    }
+
+    // Variety roast
+    if (receiptItems.length >= 8) {
+      roasts.push({
+        id: 8,
+        text: `${receiptItems.length} fitness products? Your cart looks like a GNC exploded! 🧪`,
+        emoji: "🧪",
+        color: "#F97316",
+      });
+    }
+
+    // Commitment roast
+    roasts.push({
+      id: 9,
+      text: `This receipt screams "New Year's resolution" energy... it's October! 📅`,
+      emoji: "📅",
+      color: "#6366F1",
+    });
+
+    roasts.push({
+      id: 10,
+      text: `All this protein but still can't lift your credit card debt! 💳`,
+      emoji: "💳",
+      color: "#EAB308",
+    });
+
+    return roasts;
+  }
+
+  // BEAUTY/COSMETICS RECEIPT ROASTS
+  if (isBeautyReceipt) {
+    // Makeup overload
+    const makeupCount = itemNames.filter(name =>
+      ['mascara', 'lipstick', 'foundation', 'eyeshadow', 'makeup'].some(k => name.includes(k))
+    ).length;
+    if (makeupCount >= 3) {
+      roasts.push({
+        id: 1,
+        text: `${makeupCount} makeup items? Someone's got a hot date... or just retail therapy 💄`,
+        emoji: "💄",
+        color: "#EC4899",
+      });
+    }
+
+    // Multiple lipsticks
+    if (itemNames.some(name => name.includes('lipstick') && (name.includes('5') || name.includes('set')))) {
+      roasts.push({
+        id: 2,
+        text: `5 lipstick colors!? Pick ONE vibe and stick with it! Your lips can't multitask! 💋`,
+        emoji: "💋",
+        color: "#DC2626",
+      });
+    }
+
+    // Nail polish addiction
+    if (itemNames.some(name => name.includes('nail polish') && name.includes('6'))) {
+      roasts.push({
+        id: 3,
+        text: `6 bottles of nail polish? Your nail salon just called - they're feeling threatened! 💅`,
+        emoji: "💅",
+        color: "#EC4899",
+      });
+    }
+
+    // Face masks
+    if (itemNames.some(name => name.includes('face mask'))) {
+      roasts.push({
+        id: 4,
+        text: `Face masks? Self-care Sunday turned into self-care SPENDING! 🧖‍♀️`,
+        emoji: "🧖‍♀️",
+        color: "#A855F7",
+      });
+    }
+
+    // Expensive serum
+    if (itemNames.some(name => name.includes('serum'))) {
+      const serumItem = receiptItems.find((item: any) => item.name.toLowerCase().includes('serum'));
+      if (serumItem && serumItem.price > 30) {
+        roasts.push({
+          id: 5,
+          text: `$${serumItem.price} on face serum!? That's not skincare, that's a CAR PAYMENT! 💸`,
+          emoji: "💸",
+          color: "#EF4444",
+        });
+      }
+    }
+
+    // Total price
+    if (totalPrice > 200) {
+      roasts.push({
+        id: 6,
+        text: `$${totalPrice.toFixed(2)} at CVS!? Did you buy the ENTIRE beauty aisle!? 🏪`,
+        emoji: "🛍️",
+        color: "#F59E0B",
+      });
+    }
+
+    // Impulse shopping
+    roasts.push({
+      id: 7,
+      text: `Walked in for one thing, walked out with 16 items. Classic CVS move! 🎯`,
+      emoji: "🎯",
+      color: "#8B5CF6",
+    });
+
+    // Beauty influencer
+    roasts.push({
+      id: 8,
+      text: `This receipt screams "I watched ONE makeup tutorial and lost control!" 📱`,
+      emoji: "📱",
+      color: "#06B6D4",
+    });
+
+    // Multiple brands
+    if (receiptItems.length >= 10) {
+      roasts.push({
+        id: 9,
+        text: `${receiptItems.length} different products? You're not shopping, you're HOARDING beauty supplies! 🏗️`,
+        emoji: "🏗️",
+        color: "#10B981",
+      });
+    }
+
+    roasts.push({
+      id: 10,
+      text: `Plot twist: You're actually flipping beauty products on Facebook Marketplace! 📦`,
+      emoji: "📦",
+      color: "#F97316",
+    });
+
+    return roasts;
+  }
+
+  // LATE NIGHT GAS STATION RECEIPT ROASTS
+  if (isLateNightReceipt) {
+    // Energy drinks
+    const energyDrinkCount = itemNames.filter(name =>
+      ['monster', 'red bull', '5 hour', 'energy'].some(k => name.includes(k))
+    ).length;
+    if (energyDrinkCount >= 2) {
+      roasts.push({
+        id: 1,
+        text: `${energyDrinkCount} different energy drinks? Your heart is gonna file a restraining order! 💔`,
+        emoji: "⚡",
+        color: "#EF4444",
+      });
+    }
+
+    // Multiple monsters
+    if (itemNames.some(name => name.includes('monster') && name.includes('4'))) {
+      roasts.push({
+        id: 2,
+        text: `4 cans of Monster!? Bro, sleep is FREE. This is just expensive insomnia! 😵`,
+        emoji: "😵",
+        color: "#10B981",
+      });
+    }
+
+    // Taquitos
+    if (itemNames.some(name => name.includes('taquito'))) {
+      roasts.push({
+        id: 3,
+        text: `Gas station taquitos at 2am? Your stomach is BRAVE. Respect the chaos! 🌮`,
+        emoji: "🌮",
+        color: "#F59E0B",
+      });
+    }
+
+    // Hot dog
+    if (itemNames.some(name => name.includes('hot dog'))) {
+      roasts.push({
+        id: 4,
+        text: `Chili cheese hot dog from 7-Eleven? That's not dinner, that's a CRY FOR HELP! 🌭`,
+        emoji: "🌭",
+        color: "#DC2626",
+      });
+    }
+
+    // Slurpee
+    if (itemNames.some(name => name.includes('slurpee') || name.includes('big gulp'))) {
+      roasts.push({
+        id: 5,
+        text: `Big Gulp Slurpee? Your brain freeze is gonna have a brain freeze! 🧊`,
+        emoji: "🧊",
+        color: "#06B6D4",
+      });
+    }
+
+    // Multiple energy sources
+    if (energyDrinkCount >= 2) {
+      roasts.push({
+        id: 6,
+        text: `Energy drinks + 5 Hour Energy? That's not staying awake, that's summoning demons! 👹`,
+        emoji: "👹",
+        color: "#8B5CF6",
+      });
+    }
+
+    // Late night timing
+    roasts.push({
+      id: 7,
+      text: `This has "It's 3am and I made poor life choices" written ALL over it! ⏰`,
+      emoji: "⏰",
+      color: "#6366F1",
+    });
+
+    // Beef jerky
+    if (itemNames.some(name => name.includes('jerky') || name.includes('slim jim'))) {
+      roasts.push({
+        id: 8,
+        text: `Beef jerky and energy drinks? Someone's pulling an all-nighter... or running from the law! 🏃`,
+        emoji: "🚓",
+        color: "#F97316",
+      });
+    }
+
+    // Price check
+    if (totalPrice < 50) {
+      roasts.push({
+        id: 9,
+        text: `Only $${totalPrice.toFixed(2)} for pure chaos? That's actually impressive value! 🎰`,
+        emoji: "🎰",
+        color: "#EC4899",
+      });
+    }
+
+    roasts.push({
+      id: 10,
+      text: `Your 7-Eleven run is giving "I'm studying for finals" or "avoiding my responsibilities" 📚`,
+      emoji: "📚",
+      color: "#EAB308",
+    });
+
+    return roasts;
+  }
+
+  // BULK/CHURCH FOOD ROASTS
+  if (isBulkReceipt) {
+    // Feeding an army
+    if (receiptItems.length >= 15) {
+      roasts.push({
+        id: 1,
+        text: `${receiptItems.length} items!? Are you feeding a small village or preparing for the apocalypse? 🏘️`,
+        emoji: "🏘️",
+        color: "#F59E0B",
+      });
+    }
+
+    // Bulk quantities
+    if (itemNames.some(name => name.includes('gallon') && name.includes('15'))) {
+      roasts.push({
+        id: 2,
+        text: `15 GALLONS of milk!? Your fridge is crying right now! 🥛`,
+        emoji: "🥛",
+        color: "#3B82F6",
+      });
+    }
+
+    if (itemNames.some(name => name.includes('dozen') && name.includes('20'))) {
+      roasts.push({
+        id: 3,
+        text: `20 dozen eggs? That's 240 eggs! Someone's making an OMELET EMPIRE! 🍳`,
+        emoji: "🍳",
+        color: "#FCD34D",
+      });
+    }
+
+    // Bread loaves
+    if (itemNames.some(name => name.includes('loaves') || name.includes('12'))) {
+      roasts.push({
+        id: 4,
+        text: `12 loaves of bread? Jesus could NEVER! Now you're just showing off 🍞`,
+        emoji: "🍞",
+        color: "#D97706",
+      });
+    }
+
+    // Total price
+    if (totalPrice > 500) {
+      roasts.push({
+        id: 5,
+        text: `$${totalPrice.toFixed(2)}!? This isn't grocery shopping, it's a down payment on a house! 🏠`,
+        emoji: "🏠",
+        color: "#10B981",
+      });
+    }
+
+    // Costco vibes
+    roasts.push({
+      id: 6,
+      text: `This receipt has major "I shop at Costco with a church budget" energy! ⛪`,
+      emoji: "⛪",
+      color: "#8B5CF6",
+    });
+
+    roasts.push({
+      id: 7,
+      text: `Plot twist: You're actually running an underground restaurant from your garage! 👨‍🍳`,
+      emoji: "👨‍🍳",
+      color: "#EC4899",
+    });
+
+    return roasts;
+  }
+
+  // JUNK FOOD ROASTS (original logic)
+
+  // Roast #1: Check for chips/crisps
+  const chipKeywords = ['doritos', 'pringles', 'cheetos', 'chips', 'hot cheetos'];
+  const chipCount = itemNames.filter(name =>
+    chipKeywords.some(keyword => name.includes(keyword))
+  ).length;
+  if (chipCount >= 2) {
     roasts.push({
       id: 1,
-      text: `$${expensiveItem.price.toFixed(2)} for ${expensiveItem.name}? Someone's living their best life! 💅`,
-      emoji: "💎",
+      text: `${chipCount} different chip brands? Your dentist is gonna love this receipt! 🦷`,
+      emoji: "🥔",
+      color: "#F59E0B",
+    });
+  }
+
+  // Roast #2: Check for cookies/sweets
+  const cookieKeywords = ['oreo', 'cookie', 'twinkie', 'swiss roll', 'debbie'];
+  const cookieCount = itemNames.filter(name =>
+    cookieKeywords.some(keyword => name.includes(keyword))
+  ).length;
+  if (cookieCount >= 2) {
+    roasts.push({
+      id: 2,
+      text: `${cookieCount} different types of cookies? I see you're meal prepping for a sugar coma 🍪`,
+      emoji: "🍪",
       color: "#8B5CF6",
     });
   }
 
-  // Roast #2: Check for healthy items
-  const healthyKeywords = ['organic', 'salad', 'yogurt', 'chicken breast'];
-  const healthyCount = itemNames.filter(name =>
-    healthyKeywords.some(keyword => name.includes(keyword))
+  // Roast #3: Check for soda
+  const sodaKeywords = ['cola', 'coke', 'pepsi', 'dew', 'mountain dew', 'sprite'];
+  const sodaCount = itemNames.filter(name =>
+    sodaKeywords.some(keyword => name.includes(keyword))
   ).length;
-  if (healthyCount >= 3) {
-    roasts.push({
-      id: 2,
-      text: `${healthyCount} healthy items? Are you okay? Who forced you to be an adult? 🥗`,
-      emoji: "🥗",
-      color: "#10B981",
-    });
-  }
-
-  // Roast #3: Check total price
-  if (totalPrice > 40) {
+  if (sodaCount >= 2) {
     roasts.push({
       id: 3,
-      text: `$${totalPrice.toFixed(2)} total... and here I am eating ramen. Living different lives! 💸`,
-      emoji: "💰",
-      color: "#F59E0B",
+      text: `Double fisting soda brands? Someone's committed to the no-water lifestyle! 🥤`,
+      emoji: "🥤",
+      color: "#EF4444",
     });
-  } else if (totalPrice < 30) {
+  } else if (sodaCount === 1) {
     roasts.push({
       id: 3,
-      text: `Only $${totalPrice.toFixed(2)}? Either you're budgeting or just forgot to eat 😅`,
-      emoji: "🛒",
-      color: "#EC4899",
-    });
-  }
-
-  // Roast #4: Check for dairy items
-  const dairyKeywords = ['milk', 'yogurt', 'cheese', 'eggs'];
-  const dairyCount = itemNames.filter(name =>
-    dairyKeywords.some(keyword => name.includes(keyword))
-  ).length;
-  if (dairyCount >= 3) {
-    roasts.push({
-      id: 4,
-      text: `${dairyCount} dairy items... Your bones must be STRONG STRONG 🦴`,
-      emoji: "🥛",
+      text: `At least you're staying hydrated... with pure sugar! Water is shaking right now 💧`,
+      emoji: "💧",
       color: "#3B82F6",
     });
   }
 
-  // Roast #5: Check number of items
-  if (RECEIPT_ITEMS.length >= 10) {
+  // Roast #4: Check for candy
+  const candyKeywords = ['reese', 'candy', 'chocolate', 'peanut butter cups'];
+  const candyCount = itemNames.filter(name =>
+    candyKeywords.some(keyword => name.includes(keyword))
+  ).length;
+  if (candyCount >= 1) {
     roasts.push({
-      id: 5,
-      text: `${RECEIPT_ITEMS.length} items!? This receipt is longer than my attention span 📜`,
-      emoji: "📋",
-      color: "#EF4444",
-    });
-  } else if (RECEIPT_ITEMS.length <= 5) {
-    roasts.push({
-      id: 5,
-      text: `Only ${RECEIPT_ITEMS.length} items? What is this, a sample menu? 🍽️`,
-      emoji: "🛍️",
+      id: 4,
+      text: `Reese's on the receipt? I respect the hustle. Breakfast of champions! 🏆`,
+      emoji: "🍫",
       color: "#F97316",
     });
   }
 
-  // Roast #6: Check for breakfast items
-  const breakfastKeywords = ['eggs', 'bread', 'milk', 'yogurt', 'juice'];
-  const breakfastCount = itemNames.filter(name =>
-    breakfastKeywords.some(keyword => name.includes(keyword))
+  // Roast #5: Total price check
+  if (totalPrice > 50) {
+    roasts.push({
+      id: 5,
+      text: `$${totalPrice.toFixed(2)} on snacks!? You could've bought a vegetable... just ONE! 🥦`,
+      emoji: "💸",
+      color: "#10B981",
+    });
+  } else if (totalPrice < 40) {
+    roasts.push({
+      id: 5,
+      text: `Only $${totalPrice.toFixed(2)} for all this chaos? That's actually impressive economics 📊`,
+      emoji: "💰",
+      color: "#EC4899",
+    });
+  }
+
+  // Roast #6: Check for Pop-Tarts/pastries
+  const pastryKeywords = ['pop-tart', 'pop tart', 'tart', 'pastry'];
+  const pastryCount = itemNames.filter(name =>
+    pastryKeywords.some(keyword => name.includes(keyword))
   ).length;
-  if (breakfastCount >= 4) {
+  if (pastryCount >= 1) {
     roasts.push({
       id: 6,
-      text: `Full breakfast setup! Look at you, actually eating breakfast like a responsible human 🍳`,
-      emoji: "🍳",
-      color: "#FBBF24",
+      text: `Pop-Tarts? What are you, a college student speedrunning diabetes? 🎓`,
+      emoji: "🧁",
+      color: "#EC4899",
     });
   }
 
-  // Roast #7: Check for pasta/carbs
-  const carbKeywords = ['pasta', 'bread', 'rice'];
-  const carbCount = itemNames.filter(name =>
-    carbKeywords.some(keyword => name.includes(keyword))
-  ).length;
-  if (carbCount >= 2) {
+  // Roast #7: Check number of items (they're ALL junk food)
+  if (receiptItems.length >= 10) {
     roasts.push({
       id: 7,
-      text: `Carb loading I see... Training for a marathon or just living your best life? 🍝`,
-      emoji: "🍝",
-      color: "#F43F5E",
+      text: `${receiptItems.length} items of pure chaos! Your grocery cart is basically a gas station 🏪`,
+      emoji: "🛒",
+      color: "#DC2626",
     });
   }
 
-  // Roast #8: Generic roast based on organic items
-  const organicCount = itemNames.filter(name => name.includes('organic')).length;
-  if (organicCount >= 1) {
+  // Roast #8: Hot Cheetos specific
+  const hotCheetosCount = itemNames.filter(name => name.includes('hot cheetos') || name.includes('flamin')).length;
+  if (hotCheetosCount >= 1) {
     roasts.push({
       id: 8,
-      text: `"Organic" bananas... We get it, you care about the planet 🌍`,
-      emoji: "🌱",
-      color: "#22C55E",
+      text: `Flamin' Hot Cheetos? Your fingers are gonna be red for DAYS. Worth it though 🔥`,
+      emoji: "🔥",
+      color: "#DC2626",
     });
   }
 
-  // Default roast if none match
-  if (roasts.length === 0) {
+  // Roast #9: Family size Oreos
+  if (itemNames.some(name => name.includes('oreo') && name.includes('family'))) {
     roasts.push({
       id: 9,
-      text: `Pretty basic shopping trip... but hey, at least you're eating! 🤷`,
-      emoji: "🛒",
+      text: `"Family Size" Oreos when you live alone? I see you. No judgment... okay, maybe a little 👀`,
+      emoji: "👨‍👩‍👧‍👦",
+      color: "#6366F1",
+    });
+  }
+
+  // Roast #10: Zero nutrition check
+  const hasAnyNutrition = itemNames.some(name =>
+    ['fruit', 'veggie', 'vegetable', 'salad', 'water', 'juice'].some(healthy => name.includes(healthy))
+  );
+  if (!hasAnyNutrition) {
+    roasts.push({
+      id: 10,
+      text: `Not a SINGLE nutritious item? Your body is running on pure vibes and preservatives! 😤`,
+      emoji: "⚠️",
+      color: "#EAB308",
+    });
+  }
+
+  // Roast #11: Snack variety
+  if (receiptItems.length >= 8) {
+    roasts.push({
+      id: 11,
+      text: `This isn't a grocery haul, it's a convenience store robbery! Where's the real food? 🚨`,
+      emoji: "🚨",
+      color: "#EF4444",
+    });
+  }
+
+  // Default roast if somehow none match (shouldn't happen with this junk food)
+  if (roasts.length === 0) {
+    roasts.push({
+      id: 12,
+      text: `This receipt is a cry for help... but also kinda iconic? 🤷`,
+      emoji: "🛍️",
       color: "#6B7280",
     });
   }
@@ -168,22 +593,25 @@ function generateRoasts(): Roast[] {
 
 export default function ShareRoastScreen() {
   const router = useRouter();
-  const [availableRoasts] = useState<Roast[]>(generateRoasts());
+  const params = useLocalSearchParams();
+
+  // Get receipt data from navigation params
+  const storeName = params.storeName as string || 'Unknown Store';
+  const receiptItems = params.items ? JSON.parse(params.items as string) : [];
+
+  const [availableRoasts] = useState<Roast[]>(generateRoasts(receiptItems));
   const [selectedRoast, setSelectedRoast] = useState<Roast>(availableRoasts[0]);
   const [shareExternal, setShareExternal] = useState(false);
   const [isGenerating, setIsGenerating] = useState(true);
   const fadeAnim = new Animated.Value(0);
-  const videoRef = useRef<Video>(null);
-  const [showVideo, setShowVideo] = useState(false);
-  const [videoDuration, setVideoDuration] = useState(0);
 
   useEffect(() => {
-    // Simulate AI generation
+    // Generate AI roast
     setTimeout(() => {
-      setIsGenerating(false);
       // Pick a random roast from AI-generated roasts
       const randomRoast = availableRoasts[Math.floor(Math.random() * availableRoasts.length)];
       setSelectedRoast(randomRoast);
+      setIsGenerating(false);
 
       Animated.timing(fadeAnim, {
         toValue: 1,
@@ -213,30 +641,6 @@ export default function ShareRoastScreen() {
         }).start();
       }, 1000);
     });
-  };
-
-  const handleVideoLoad = (status: any) => {
-    if (status.isLoaded && status.durationMillis) {
-      const durationInSeconds = Math.floor(status.durationMillis / 1000);
-      setVideoDuration(durationInSeconds);
-
-      // If video is longer than 30 seconds, stop it at 30 seconds
-      if (durationInSeconds > 30) {
-        videoRef.current?.setPositionAsync(0);
-      }
-    }
-  };
-
-  const handlePlaybackStatusUpdate = (status: any) => {
-    if (status.isLoaded && status.positionMillis && status.durationMillis) {
-      const positionInSeconds = Math.floor(status.positionMillis / 1000);
-
-      // Stop video at 30 seconds if it's longer
-      if (positionInSeconds >= 30) {
-        videoRef.current?.pauseAsync();
-        videoRef.current?.setPositionAsync(0);
-      }
-    }
   };
 
   const handlePost = () => {
@@ -285,32 +689,45 @@ export default function ShareRoastScreen() {
           <Text style={styles.aiLabelText}>AI-Generated Roast</Text>
         </View>
 
-        {/* Video Player */}
+        {/* AI Roast Display - Intense visual roast */}
         {!isGenerating && (
-          <View style={styles.videoContainer}>
-            <Video
-              ref={videoRef}
-              source={{
-                // TO ADD YOUR VIDEO: Place your video file in apps/mobile/assets/
-                // and replace 'roast-video.mp4' with your filename
-                uri: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4'
-              }}
-              style={styles.video}
-              useNativeControls
-              resizeMode={ResizeMode.CONTAIN}
-              isLooping={false}
-              shouldPlay={false}
-              onLoad={handleVideoLoad}
-              onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
-            />
-            <View style={styles.videoOverlay}>
-              <Text style={styles.videoLabel}>📹 AI Roast Video (Max 30s)</Text>
+          <View style={styles.roastImageContainer}>
+            {/* Intense background effect */}
+            <View style={styles.roastBackground}>
+              <Text style={styles.backgroundEmoji}>🔥</Text>
+              <Text style={styles.backgroundEmoji}>💀</Text>
+              <Text style={styles.backgroundEmoji}>🔥</Text>
             </View>
-            {videoDuration > 0 && videoDuration > 30 && (
-              <View style={styles.videoDurationBadge}>
-                <Text style={styles.videoDurationText}>⚠️ Trimmed to 30s</Text>
+
+            {/* Main roast content */}
+            <View style={styles.roastContent}>
+              <Text style={styles.roastLabel}>🤖 AI ROAST</Text>
+              <View style={styles.roastTextBox}>
+                <Text style={styles.intensityIndicator}>ROAST LEVEL: MAXIMUM 🔥🔥🔥</Text>
+                <Text style={styles.roastMainText}>{selectedRoast.text}</Text>
               </View>
-            )}
+
+              {/* Receipt summary for context */}
+              <View style={styles.receiptSummary}>
+                <Text style={styles.receiptSummaryTitle}>THE EVIDENCE:</Text>
+                <View style={styles.receiptItemsGrid}>
+                  {receiptItems.slice(0, 6).map((item: any, index: number) => (
+                    <View key={index} style={styles.receiptPill}>
+                      <Text style={styles.receiptPillText}>{item.name}</Text>
+                    </View>
+                  ))}
+                  {receiptItems.length > 6 && (
+                    <View style={styles.receiptPill}>
+                      <Text style={styles.receiptPillText}>+{receiptItems.length - 6} more</Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+            </View>
+
+            <Text style={styles.roastDisclaimer}>
+              ⚠️ This AI roast is based on your actual junk food purchases
+            </Text>
           </View>
         )}
 
@@ -593,44 +1010,107 @@ const styles = StyleSheet.create({
     color: '#78350F',
     lineHeight: 20,
   },
-  videoContainer: {
+  roastImageContainer: {
     marginBottom: 24,
-    borderRadius: 16,
+    backgroundColor: '#DC2626',
+    borderRadius: 20,
     overflow: 'hidden',
-    backgroundColor: '#000',
-    position: 'relative',
+    borderWidth: 4,
+    borderColor: '#7F1D1D',
+    shadowColor: '#DC2626',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.5,
+    shadowRadius: 16,
+    elevation: 12,
   },
-  video: {
-    width: width - 40,
-    height: (width - 40) * 9 / 16,
-    backgroundColor: '#000',
-  },
-  videoOverlay: {
+  roastBackground: {
     position: 'absolute',
-    top: 12,
-    right: 12,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    opacity: 0.1,
+  },
+  backgroundEmoji: {
+    fontSize: 100,
+    color: '#000000',
+  },
+  roastContent: {
+    padding: 24,
+  },
+  roastLabel: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#FEE2E2',
+    textAlign: 'center',
+    marginBottom: 12,
+    letterSpacing: 2,
+  },
+  roastTextBox: {
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 20,
+    borderWidth: 2,
+    borderColor: '#FCA5A5',
+  },
+  intensityIndicator: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#FCA5A5',
+    textAlign: 'center',
+    marginBottom: 12,
+    letterSpacing: 1,
+  },
+  roastMainText: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    textAlign: 'center',
+    lineHeight: 32,
+    textShadowColor: '#000',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
+  },
+  receiptSummary: {
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    borderRadius: 12,
+    padding: 16,
+  },
+  receiptSummaryTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#FCD34D',
+    marginBottom: 12,
+    letterSpacing: 1,
+  },
+  receiptItemsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  receiptPill: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 8,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
   },
-  videoLabel: {
+  receiptPillText: {
     fontSize: 12,
     fontWeight: '600',
     color: '#FFFFFF',
   },
-  videoDurationBadge: {
-    position: 'absolute',
-    top: 12,
-    left: 12,
-    backgroundColor: 'rgba(239, 68, 68, 0.9)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  videoDurationText: {
+  roastDisclaimer: {
     fontSize: 11,
-    fontWeight: '600',
-    color: '#FFFFFF',
+    color: '#FEE2E2',
+    textAlign: 'center',
+    padding: 12,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    fontStyle: 'italic',
   },
 });

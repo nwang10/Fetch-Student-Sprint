@@ -9,27 +9,27 @@ import {
   Switch,
   Image,
   Platform,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 
-// Hardcoded receipt items from scan
-const RECEIPT_ITEMS = [
-  { id: 1, name: 'Organic Bananas', price: 3.49 },
-  { id: 2, name: 'Whole Milk (1 Gallon)', price: 4.99 },
-  { id: 3, name: 'Greek Yogurt', price: 5.99 },
-  { id: 4, name: 'Bread - Whole Wheat', price: 3.29 },
-  { id: 5, name: 'Eggs (Dozen)', price: 4.49 },
-  { id: 6, name: 'Orange Juice', price: 5.49 },
-  { id: 7, name: 'Chicken Breast (2 lbs)', price: 12.99 },
-  { id: 8, name: 'Mixed Salad Greens', price: 4.29 },
-  { id: 9, name: 'Tomatoes', price: 3.99 },
-  { id: 10, name: 'Pasta - Penne', price: 2.49 },
-];
-
 export default function ShareReviewScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
+
+  // Get receipt data from navigation params
+  const storeName = params.storeName as string || 'Unknown Store';
+  const receiptItems = params.items ? JSON.parse(params.items as string) : [];
+
+  const RECEIPT_ITEMS = receiptItems.map((item: any, index: number) => ({
+    id: index + 1,
+    name: item.name,
+    price: item.price,
+  }));
+
+  const [reviewMode, setReviewMode] = useState<'single' | 'multiple' | 'trip'>('single');
+  const [selectedItems, setSelectedItems] = useState<number[]>([0]); // Array of indices
   const [selectedItem, setSelectedItem] = useState(RECEIPT_ITEMS[0]);
   const [rating, setRating] = useState(0);
   const [reviewText, setReviewText] = useState('');
@@ -75,27 +75,58 @@ export default function ShareReviewScreen() {
     });
   };
 
+  const toggleItemSelection = (index: number) => {
+    if (reviewMode === 'single') {
+      setSelectedItems([index]);
+      setSelectedItem(RECEIPT_ITEMS[index]);
+    } else if (reviewMode === 'multiple') {
+      if (selectedItems.includes(index)) {
+        const newSelected = selectedItems.filter(i => i !== index);
+        setSelectedItems(newSelected.length > 0 ? newSelected : [index]);
+      } else {
+        setSelectedItems([...selectedItems, index]);
+      }
+    }
+  };
+
+  const getProductName = () => {
+    if (reviewMode === 'trip') {
+      return `${storeName} Shopping Trip`;
+    } else if (reviewMode === 'multiple') {
+      const items = selectedItems.map(i => RECEIPT_ITEMS[i].name);
+      return items.length > 2 ? `${items[0]} & ${items.length - 1} others` : items.join(' & ');
+    }
+    return selectedItem.name;
+  };
+
   const handlePost = () => {
     router.push({
       pathname: '/feed',
       params: {
         newPost: JSON.stringify({
           type: 'review',
-          productName: selectedItem.name,
+          productName: getProductName(),
           rating,
-          reviewText: reviewText || `Great product! ${rating}/5 stars!`,
+          reviewText: reviewText || `Great ${reviewMode === 'trip' ? 'shopping experience' : 'product'}! ${rating}/5 stars!`,
           shareExternal,
           media,
           mediaType,
+          storeName,
+          receiptItems: RECEIPT_ITEMS,
+          reviewMode,
         }),
       },
     });
   };
 
-  const canPost = rating > 0 && selectedItem;
+  const canPost = rating > 0 && (reviewMode === 'trip' || (reviewMode === 'single' && selectedItem) || (reviewMode === 'multiple' && selectedItems.length > 0));
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+    >
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.push('/scan-results')}>
@@ -118,36 +149,88 @@ export default function ShareReviewScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
-        {/* Select Product */}
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={styles.contentContainer}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+      >
+        {/* Review Mode Selector */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Select a Product</Text>
+          <Text style={styles.sectionTitle}>What would you like to review?</Text>
+          <View style={styles.modeSelector}>
+            <TouchableOpacity
+              style={[styles.modeButton, reviewMode === 'single' && styles.modeButtonActive]}
+              onPress={() => {
+                setReviewMode('single');
+                setSelectedItems([0]);
+              }}
+            >
+              <Text style={[styles.modeButtonText, reviewMode === 'single' && styles.modeButtonTextActive]}>
+                Single Item
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.modeButton, reviewMode === 'multiple' && styles.modeButtonActive]}
+              onPress={() => {
+                setReviewMode('multiple');
+                setSelectedItems([0]);
+              }}
+            >
+              <Text style={[styles.modeButtonText, reviewMode === 'multiple' && styles.modeButtonTextActive]}>
+                Multiple Items
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.modeButton, reviewMode === 'trip' && styles.modeButtonActive]}
+              onPress={() => setReviewMode('trip')}
+            >
+              <Text style={[styles.modeButtonText, reviewMode === 'trip' && styles.modeButtonTextActive]}>
+                Whole Trip
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Select Product */}
+        {reviewMode !== 'trip' && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>
+              {reviewMode === 'multiple' ? 'Select Products (tap to select multiple)' : 'Select a Product'}
+            </Text>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             style={styles.itemsScroll}
             contentContainerStyle={styles.itemsScrollContent}
           >
-            {RECEIPT_ITEMS.map((item) => (
-              <TouchableOpacity
-                key={item.id}
-                style={[
-                  styles.itemCard,
-                  selectedItem.id === item.id && styles.itemCardSelected,
-                ]}
-                onPress={() => setSelectedItem(item)}
-              >
-                <Text style={styles.itemName}>{item.name}</Text>
-                <Text style={styles.itemPrice}>${item.price.toFixed(2)}</Text>
-                {selectedItem.id === item.id && (
-                  <View style={styles.selectedBadge}>
-                    <Text style={styles.selectedBadgeText}>✓</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-            ))}
+            {RECEIPT_ITEMS.map((item, index) => {
+              const isSelected = reviewMode === 'single'
+                ? selectedItem.id === item.id
+                : selectedItems.includes(index);
+
+              return (
+                <TouchableOpacity
+                  key={item.id}
+                  style={[
+                    styles.itemCard,
+                    isSelected && styles.itemCardSelected,
+                  ]}
+                  onPress={() => toggleItemSelection(index)}
+                >
+                  <Text style={styles.itemName}>{item.name}</Text>
+                  <Text style={styles.itemPrice}>${item.price.toFixed(2)}</Text>
+                  {isSelected && (
+                    <View style={styles.selectedBadge}>
+                      <Text style={styles.selectedBadgeText}>✓</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              );
+            })}
           </ScrollView>
         </View>
+        )}
 
         {/* Rating */}
         <View style={styles.section}>
@@ -187,6 +270,8 @@ export default function ShareReviewScreen() {
             onChangeText={setReviewText}
             multiline
             maxLength={150}
+            returnKeyType="done"
+            blurOnSubmit={true}
           />
           <Text style={styles.charCount}>{reviewText.length}/150</Text>
         </View>
@@ -281,7 +366,7 @@ export default function ShareReviewScreen() {
           </View>
         )}
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -342,6 +427,32 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#111827',
     marginBottom: 16,
+  },
+  modeSelector: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  modeButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+  },
+  modeButtonActive: {
+    borderColor: '#F59E0B',
+    backgroundColor: '#FFFBEB',
+  },
+  modeButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  modeButtonTextActive: {
+    color: '#F59E0B',
   },
   itemsScroll: {
     marginHorizontal: -20,

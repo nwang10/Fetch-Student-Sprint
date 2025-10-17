@@ -95,7 +95,10 @@ export default function CameraScreen() {
 
     // Simulate scanning and navigate to results
     setTimeout(() => {
-      router.push('/scan-results');
+      router.push({
+        pathname: '/scan-results',
+        params: { fromCamera: 'true' },
+      });
     }, 1500);
   };
 

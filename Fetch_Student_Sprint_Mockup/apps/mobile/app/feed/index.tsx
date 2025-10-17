@@ -15,6 +15,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import Toast from '../components/Toast';
 import CommentsModal from '../components/CommentsModal';
 import RoastImage from '../components/RoastImage';
+import ReviewCard from '../components/ReviewCard';
 import * as api from '../../services/api';
 
 // Types
@@ -47,6 +48,14 @@ interface Post {
   isRoast?: boolean;
   roastText?: string;
   roastEmoji?: string;
+  // Review-specific fields
+  isReview?: boolean;
+  productName?: string;
+  rating?: number;
+  reviewText?: string;
+  reviewMedia?: string;
+  storeName?: string;
+  // Shared field for both roast and review
   receiptItems?: Array<{ name: string; price: number }>;
 }
 
@@ -240,9 +249,11 @@ const PostCard: React.FC<{
         isOwner={isOwner}
       />
 
-      <View style={styles.caption}>
-        <Text style={styles.captionText}>{post.caption}</Text>
-      </View>
+      {!post.isReview && (
+        <View style={styles.caption}>
+          <Text style={styles.captionText}>{post.caption}</Text>
+        </View>
+      )}
 
       {post.isRoast && post.roastText ? (
         <RoastImage
@@ -250,8 +261,42 @@ const PostCard: React.FC<{
           roastEmoji={post.roastEmoji}
           receiptItems={post.receiptItems}
         />
+      ) : post.isReview && post.productName && post.rating ? (
+        <ReviewCard
+          productName={post.productName}
+          rating={post.rating}
+          reviewText={post.reviewText || ''}
+          mediaUri={post.reviewMedia}
+          storeName={post.storeName}
+          receiptItems={post.receiptItems}
+        />
       ) : (
-        <PostImage source={post.imageSource} />
+        <>
+          <PostImage source={post.imageSource} />
+          {post.storeName && post.receiptItems && post.receiptItems.length > 0 && (
+            <View style={styles.haulReceiptInfo}>
+              <View style={styles.haulHeader}>
+                <Text style={styles.haulStore}>{post.storeName}</Text>
+                <Text style={styles.haulPoints}>+{post.points} pts</Text>
+              </View>
+              <View style={styles.haulItemsContainer}>
+                <Text style={styles.haulItemsTitle}>Items ({post.receiptItems.length})</Text>
+                <View style={styles.haulItemsGrid}>
+                  {post.receiptItems.slice(0, 6).map((item: any, index: number) => (
+                    <View key={index} style={styles.haulItemPill}>
+                      <Text style={styles.haulItemText}>{item.name}</Text>
+                    </View>
+                  ))}
+                  {post.receiptItems.length > 6 && (
+                    <View style={styles.haulItemPill}>
+                      <Text style={styles.haulItemText}>+{post.receiptItems.length - 6} more</Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+            </View>
+          )}
+        </>
       )}
 
       <PostFooter
@@ -350,6 +395,9 @@ export default function FeedScreen() {
         initialLikes: 0,
         initialComments: 0,
         points,
+        // Add receipt data for hauls
+        storeName: postData.storeName,
+        receiptItems: postData.receiptItems || [],
       };
       setToastMessage(`Posted to your Fetch Feed! +${points} Fetch Points earned.`);
       setToastEmoji('🎉');
@@ -393,12 +441,20 @@ export default function FeedScreen() {
       newPost = {
         avatar: 'https://i.pravatar.cc/100?img=50',
         name: 'You',
-        subline: 'Reviewed a product',
-        caption: `${'⭐'.repeat(postData.rating)} ${postData.productName}\n"${postData.reviewText}"`,
-        imageSource: postData.media ? { uri: postData.media } : { uri: 'https://picsum.photos/seed/review/800/600' },
+        subline: `Reviewed ${postData.productName}`,
+        caption: '', // Caption not shown for reviews
+        imageSource: { uri: '' }, // Not used for review posts
         initialLikes: 0,
         initialComments: 0,
         points,
+        // Review-specific data
+        isReview: true,
+        productName: postData.productName,
+        rating: postData.rating,
+        reviewText: postData.reviewText,
+        reviewMedia: postData.media,
+        storeName: postData.storeName,
+        receiptItems: postData.receiptItems || [],
       };
       setToastMessage(`Review posted! +${points} Fetch Points earned.`);
       setToastEmoji('⭐');
@@ -887,5 +943,54 @@ const styles = StyleSheet.create({
   },
   cameraEmoji: {
     fontSize: 32,
+  },
+  haulReceiptInfo: {
+    backgroundColor: '#F9FAFB',
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+  },
+  haulHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  haulStore: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#111827',
+  },
+  haulPoints: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#7C3AED',
+  },
+  haulItemsContainer: {
+    marginTop: 8,
+  },
+  haulItemsTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6B7280',
+    marginBottom: 8,
+  },
+  haulItemsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  haulItemPill: {
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  haulItemText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#374151',
   },
 });

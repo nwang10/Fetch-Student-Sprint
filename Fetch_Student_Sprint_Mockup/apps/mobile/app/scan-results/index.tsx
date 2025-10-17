@@ -7,39 +7,34 @@ import {
   TouchableOpacity,
   Animated,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import ShareToFeedModal from '../components/ShareToFeedModal';
+import { getNextReceipt, Receipt, RECEIPTS, getCurrentReceiptIndex } from '../../data/receipts';
 
-interface ReceiptItem {
-  name: string;
-  price: number;
-  points: number;
-}
-
-// Hardcoded receipt data
-const RECEIPT_DATA: ReceiptItem[] = [
-  { name: 'Organic Bananas', price: 3.49, points: 5 },
-  { name: 'Whole Milk (1 Gallon)', price: 4.99, points: 8 },
-  { name: 'Greek Yogurt', price: 5.99, points: 10 },
-  { name: 'Bread - Whole Wheat', price: 3.29, points: 5 },
-  { name: 'Eggs (Dozen)', price: 4.49, points: 7 },
-  { name: 'Orange Juice', price: 5.49, points: 9 },
-  { name: 'Chicken Breast (2 lbs)', price: 12.99, points: 15 },
-  { name: 'Mixed Salad Greens', price: 4.29, points: 6 },
-  { name: 'Tomatoes', price: 3.99, points: 5 },
-  { name: 'Pasta - Penne', price: 2.49, points: 4 },
-];
-
-const TOTAL_POINTS = RECEIPT_DATA.reduce((sum, item) => sum + item.points, 0);
-const TOTAL_PRICE = RECEIPT_DATA.reduce((sum, item) => sum + item.price, 0);
+// Store the current receipt in a module-level variable so it persists
+let currentScanReceipt: Receipt | null = null;
 
 export default function ScanResultsScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
+
+  // Only get a new receipt if coming from camera (fromCamera param)
+  // Otherwise use the existing one
+  const [receipt] = useState<Receipt>(() => {
+    if (params.fromCamera === 'true' || !currentScanReceipt) {
+      currentScanReceipt = getNextReceipt();
+    }
+    return currentScanReceipt!;
+  });
+
   const [showItems, setShowItems] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
   const itemFadeAnim = useRef(new Animated.Value(0)).current;
+
+  const TOTAL_POINTS = receipt.items.reduce((sum, item) => sum + item.points, 0);
+  const TOTAL_PRICE = receipt.items.reduce((sum, item) => sum + item.price, 0);
 
   useEffect(() => {
     // Animate the points display
@@ -74,12 +69,27 @@ export default function ScanResultsScreen() {
   }, [showItems]);
 
   const handleShareOption = (option: 'haul' | 'roast' | 'review') => {
+    // Pass receipt data through navigation params
+    const receiptData = {
+      storeName: receipt.storeName,
+      items: JSON.stringify(receipt.items),
+    };
+
     if (option === 'haul') {
-      router.push('/share-haul');
+      router.push({
+        pathname: '/share-haul',
+        params: receiptData,
+      });
     } else if (option === 'roast') {
-      router.push('/share-roast');
+      router.push({
+        pathname: '/share-roast',
+        params: receiptData,
+      });
     } else if (option === 'review') {
-      router.push('/share-review');
+      router.push({
+        pathname: '/share-review',
+        params: receiptData,
+      });
     }
   };
 
@@ -120,20 +130,20 @@ export default function ScanResultsScreen() {
           <Animated.View style={[styles.receiptCard, { opacity: itemFadeAnim }]}>
             <View style={styles.receiptHeader}>
               <Text style={styles.receiptTitle}>Receipt Details</Text>
-              <View style={styles.receiptStoreBadge}>
-                <Text style={styles.receiptStoreText}>Target</Text>
+              <View style={[styles.receiptStoreBadge, { backgroundColor: `${receipt.storeColor}20` }]}>
+                <Text style={[styles.receiptStoreText, { color: receipt.storeColor }]}>{receipt.storeName}</Text>
               </View>
             </View>
 
             <View style={styles.receiptInfo}>
               <Text style={styles.receiptDate}>Today • {new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</Text>
-              <Text style={styles.receiptItemCount}>{RECEIPT_DATA.length} items</Text>
+              <Text style={styles.receiptItemCount}>{receipt.items.length} items</Text>
             </View>
 
             {/* Items List */}
             <View style={styles.itemsList}>
-              {RECEIPT_DATA.map((item, index) => (
-                <View key={index} style={[styles.itemRow, index < RECEIPT_DATA.length - 1 && { marginBottom: 12 }]}>
+              {receipt.items.map((item, index) => (
+                <View key={index} style={[styles.itemRow, index < receipt.items.length - 1 && { marginBottom: 12 }]}>
                   <View style={styles.itemInfo}>
                     <Text style={styles.itemName}>{item.name}</Text>
                     <Text style={styles.itemPrice}>${item.price.toFixed(2)}</Text>
@@ -304,7 +314,6 @@ const styles = StyleSheet.create({
     color: '#111827',
   },
   receiptStoreBadge: {
-    backgroundColor: '#FEE2E2',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 12,
@@ -312,7 +321,6 @@ const styles = StyleSheet.create({
   receiptStoreText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#DC2626',
   },
   receiptInfo: {
     flexDirection: 'row',
