@@ -312,7 +312,7 @@ const PostCard: React.FC<{
 };
 
 // Header Component
-const FeedHeader: React.FC = () => (
+const FeedHeader: React.FC<{ router: any }> = ({ router }) => (
   <View style={styles.header}>
     <View style={styles.headerTitle}>
       <Text style={styles.headerTitleText}>
@@ -325,6 +325,10 @@ const FeedHeader: React.FC = () => (
       <Text style={styles.navTextActive}>Feed</Text>
       <Text style={styles.navDot}>•</Text>
       <Text style={styles.navText}>Leaderboard</Text>
+      <Text style={styles.navDot}>•</Text>
+      <TouchableOpacity onPress={() => router.push('/profile')}>
+        <Text style={styles.navText}>Profile</Text>
+      </TouchableOpacity>
     </View>
   </View>
 );
@@ -698,7 +702,7 @@ export default function FeedScreen() {
 
   return (
     <View style={styles.container}>
-      <FeedHeader />
+      <FeedHeader router={router} />
       <FlatList
         data={posts}
         keyExtractor={(item) => item.id}
