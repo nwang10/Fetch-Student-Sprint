@@ -14,10 +14,13 @@ const getApiBaseUrl = () => {
   }
   // For iOS/Android - Using current Wi-Fi IP
   // Make sure your iPhone is on the same Wi-Fi network as your computer
-  return 'http://192.168.0.105:3000/api';
+  return 'http://192.168.12.58:3000/api';
 };
 
 const API_BASE_URL = getApiBaseUrl();
+
+console.log('API Base URL:', API_BASE_URL);
+console.log('Platform:', Platform.OS);
 
 export interface Post {
   id: string;
@@ -32,17 +35,59 @@ export interface Post {
   createdAt?: string;
 }
 
+// Helper function to add timeout to fetch
+const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeout = 10000) => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(`Request timeout after ${timeout}ms - Check if backend server is running and accessible`);
+    }
+    throw error;
+  }
+};
+
 // Fetch all posts
 export const fetchPosts = async (): Promise<Post[]> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/posts`);
+    console.log('Fetching posts from:', `${API_BASE_URL}/posts`);
+    const startTime = Date.now();
+
+    const response = await fetchWithTimeout(`${API_BASE_URL}/posts`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    }, 10000);
+
+    const fetchTime = Date.now() - startTime;
+    console.log(`Fetch took ${fetchTime}ms`);
+    console.log('Response status:', response.status);
+    console.log('Response ok:', response.ok);
+
     const data = await response.json();
+    console.log('Response data:', data);
+
     if (data.success) {
+      console.log('Successfully fetched', data.posts.length, 'posts');
       return data.posts;
     }
     throw new Error('Failed to fetch posts');
   } catch (error) {
     console.error('Error fetching posts:', error);
+    console.error('Error type:', error instanceof Error ? error.message : 'Unknown error');
+    if (error instanceof TypeError && error.message.includes('Network request failed')) {
+      throw new Error('Cannot connect to backend server. Make sure:\n1. Backend is running\n2. Your device is on the same WiFi\n3. IP address is correct (192.168.12.58)');
+    }
     throw error;
   }
 };
