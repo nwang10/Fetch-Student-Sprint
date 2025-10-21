@@ -18,6 +18,7 @@ export default function ReviewCameraScreen() {
   const mode = (params.mode as 'photo' | 'video') || 'photo';
 
   const [permission, requestPermission] = useCameraPermissions();
+  const [facing, setFacing] = useState<'front' | 'back'>('back');
   const [isRecording, setIsRecording] = useState(false);
   const [capturedMedia, setCapturedMedia] = useState<string | null>(null);
   const cameraRef = useRef<any>(null);
@@ -122,6 +123,12 @@ export default function ReviewCameraScreen() {
         rating: params.rating,
         reviewText: params.reviewText,
         shareExternal: params.shareExternal,
+        // Pass back receipt data
+        storeName: params.storeName,
+        items: params.items,
+        // Pass back review mode and selected items
+        reviewMode: params.reviewMode,
+        selectedItems: params.selectedItems,
       },
     });
   };
@@ -129,6 +136,10 @@ export default function ReviewCameraScreen() {
   const handleRetake = () => {
     setCapturedMedia(null);
     setRecordingTime(0);
+  };
+
+  const toggleCameraFacing = () => {
+    setFacing(current => (current === 'back' ? 'front' : 'back'));
   };
 
   if (!permission) {
@@ -170,7 +181,15 @@ export default function ReviewCameraScreen() {
             {mode === 'video' ? '🎥 Video Review' : '📸 Photo Review'}
           </Text>
         </View>
-        <View style={styles.closeButton} />
+        {!capturedMedia && (
+          <TouchableOpacity
+            style={styles.flipButton}
+            onPress={toggleCameraFacing}
+          >
+            <Text style={styles.flipButtonText}>🔄</Text>
+          </TouchableOpacity>
+        )}
+        {capturedMedia && <View style={styles.closeButton} />}
       </View>
 
       {/* Preview or Captured Media */}
@@ -304,7 +323,7 @@ export default function ReviewCameraScreen() {
           <CameraContent />
         </View>
       ) : (
-        <CameraView ref={cameraRef} style={styles.camera} facing="back">
+        <CameraView ref={cameraRef} style={styles.camera} facing={facing}>
           <CameraContent />
         </CameraView>
       )}
@@ -347,6 +366,17 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 24,
     fontWeight: 'bold',
+  },
+  flipButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  flipButtonText: {
+    fontSize: 24,
   },
   headerCenter: {
     flex: 1,

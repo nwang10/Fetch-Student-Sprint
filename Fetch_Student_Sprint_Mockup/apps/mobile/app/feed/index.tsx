@@ -12,6 +12,7 @@ import {
   Platform,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Toast from '../components/Toast';
 import CommentsModal from '../components/CommentsModal';
 import RoastImage from '../components/RoastImage';
@@ -75,25 +76,31 @@ const PostHeader: React.FC<{
   subline: string;
   onDelete?: () => void;
   isOwner?: boolean;
-}> = ({ avatar, name, subline, onDelete, isOwner }) => (
-  <View style={styles.postHeader}>
-    <Avatar uri={avatar} />
-    <View style={styles.postHeaderText}>
-      <Text style={styles.name}>{name}</Text>
-      <Text style={styles.subline}>{subline}</Text>
+  currentUserAvatar?: string;
+}> = ({ avatar, name, subline, onDelete, isOwner, currentUserAvatar }) => {
+  // Use current user avatar if this is the user's post
+  const displayAvatar = isOwner && currentUserAvatar ? currentUserAvatar : avatar;
+
+  return (
+    <View style={styles.postHeader}>
+      <Avatar uri={displayAvatar} />
+      <View style={styles.postHeaderText}>
+        <Text style={styles.name}>{name}</Text>
+        <Text style={styles.subline}>{subline}</Text>
+      </View>
+      {isOwner && onDelete && (
+        <TouchableOpacity
+          onPress={onDelete}
+          style={styles.deleteButton}
+          accessibilityLabel="Delete post"
+          accessibilityRole="button"
+        >
+          <Text style={styles.deleteButtonText}>Delete</Text>
+        </TouchableOpacity>
+      )}
     </View>
-    {isOwner && onDelete && (
-      <TouchableOpacity
-        onPress={onDelete}
-        style={styles.deleteButton}
-        accessibilityLabel="Delete post"
-        accessibilityRole="button"
-      >
-        <Text style={styles.deleteButtonText}>Delete</Text>
-      </TouchableOpacity>
-    )}
-  </View>
-);
+  );
+};
 
 // Post Image Component
 const PostImage: React.FC<{ source: ImageSourcePropType | { uri: string } }> = ({
@@ -169,7 +176,8 @@ const PostCard: React.FC<{
   post: Post;
   onDelete: (id: string) => void;
   onOpenComments: (post: Post) => void;
-}> = ({ post, onDelete, onOpenComments }) => {
+  currentUserAvatar?: string;
+}> = ({ post, onDelete, onOpenComments, currentUserAvatar }) => {
   const [likes, setLikes] = useState(post.initialLikes);
   const [commentsCount, setCommentsCount] = useState(post.initialComments);
   const [isLiked, setIsLiked] = useState(false);
@@ -247,6 +255,7 @@ const PostCard: React.FC<{
         subline={post.subline}
         onDelete={handleDelete}
         isOwner={isOwner}
+        currentUserAvatar={currentUserAvatar}
       />
 
       {!post.isReview && (
@@ -345,29 +354,83 @@ export default function FeedScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [showCommentsModal, setShowCommentsModal] = useState(false);
+  const flatListRef = React.useRef<FlatList>(null);
+  const [userAvatar, setUserAvatar] = useState('https://i.pravatar.cc/100?img=50');
+  const processedPosts = React.useRef<Set<string>>(new Set());
 
   // Load posts from backend on mount
   useEffect(() => {
     loadPosts();
+    loadUserAvatar();
   }, []);
+
+  const loadUserAvatar = async () => {
+    try {
+      const savedImage = await AsyncStorage.getItem('profileImage');
+      if (savedImage) {
+        setUserAvatar(savedImage);
+      }
+    } catch (error) {
+      console.error('Failed to load user avatar:', error);
+    }
+  };
 
   // Handle new posts from navigation params
   useEffect(() => {
     if (params.newPost) {
       try {
         const newPostData = JSON.parse(params.newPost as string);
-        handleNewPost(newPostData);
+
+        // Create a unique key for this post to prevent duplicates
+        const postKey = `${newPostData.type}-${JSON.stringify(newPostData)}`;
+
+        // Only process if we haven't seen this exact post data before
+        if (!processedPosts.current.has(postKey)) {
+          processedPosts.current.add(postKey);
+          handleNewPost(newPostData);
+        } else {
+          console.log('Skipping duplicate post creation');
+        }
       } catch (e) {
         console.error('Failed to parse new post:', e);
       }
     }
   }, [params.newPost]);
 
+  // Handle scrolling to a specific post
+  useEffect(() => {
+    if (params.scrollToPost && posts.length > 0 && flatListRef.current) {
+      const postIndex = posts.findIndex(post => post.id === params.scrollToPost);
+      if (postIndex !== -1) {
+        // Small delay to ensure the list is rendered
+        setTimeout(() => {
+          flatListRef.current?.scrollToIndex({
+            index: postIndex,
+            animated: true,
+            viewPosition: 0.1, // Position at top of viewport with some padding
+          });
+        }, 100);
+      }
+    }
+  }, [params.scrollToPost, posts]);
+
   const loadPosts = async () => {
     try {
       setLoading(true);
       const fetchedPosts = await api.fetchPosts();
-      setPosts(fetchedPosts);
+
+      // Update all "You" posts to use current profile picture
+      const currentAvatar = await AsyncStorage.getItem('profileImage');
+      const avatarToUse = currentAvatar || 'https://i.pravatar.cc/100?img=50';
+
+      const updatedPosts = fetchedPosts.map((post: Post) => {
+        if (post.name === 'You') {
+          return { ...post, avatar: avatarToUse };
+        }
+        return post;
+      });
+
+      setPosts(updatedPosts);
     } catch (error) {
       console.error('Failed to load posts:', error);
       Alert.alert('Error', 'Failed to load posts. Make sure the backend server is running.');
@@ -391,7 +454,7 @@ export default function FeedScreen() {
       points = postData.shareExternal ? 35 : 25;
       const mediaUri = postData.media || postData.image; // Support both new and old format
       newPost = {
-        avatar: 'https://i.pravatar.cc/100?img=50',
+        avatar: userAvatar,
         name: 'You',
         subline: postData.mediaType === 'video' ? 'Shared a haul video' : 'Just posted',
         caption: postData.caption,
@@ -424,7 +487,7 @@ export default function FeedScreen() {
       ];
 
       newPost = {
-        avatar: 'https://i.pravatar.cc/100?img=50',
+        avatar: userAvatar,
         name: 'You',
         subline: 'AI Roasted their receipt 🔥',
         caption: `${postData.roastText}`,
@@ -443,7 +506,7 @@ export default function FeedScreen() {
     } else if (postData.type === 'review') {
       points = postData.shareExternal ? 50 : 40;
       newPost = {
-        avatar: 'https://i.pravatar.cc/100?img=50',
+        avatar: userAvatar,
         name: 'You',
         subline: `Reviewed ${postData.productName}`,
         caption: '', // Caption not shown for reviews
@@ -528,7 +591,7 @@ export default function FeedScreen() {
     try {
       // Create comment data to send to backend
       const commentData = {
-        avatar: 'https://i.pravatar.cc/100?img=50',
+        avatar: userAvatar,
         name: 'You',
         text: commentText,
         likes: 0,
@@ -704,6 +767,7 @@ export default function FeedScreen() {
     <View style={styles.container}>
       <FeedHeader router={router} />
       <FlatList
+        ref={flatListRef}
         data={posts}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
@@ -711,12 +775,20 @@ export default function FeedScreen() {
             post={item}
             onDelete={handleDeletePost}
             onOpenComments={handleOpenComments}
+            currentUserAvatar={userAvatar}
           />
         )}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         refreshing={refreshing}
         onRefresh={handleRefresh}
+        onScrollToIndexFailed={(info) => {
+          // Handle scroll to index failure by waiting and trying again
+          const wait = new Promise(resolve => setTimeout(resolve, 500));
+          wait.then(() => {
+            flatListRef.current?.scrollToIndex({ index: info.index, animated: true });
+          });
+        }}
       />
 
       {/* Camera Button */}

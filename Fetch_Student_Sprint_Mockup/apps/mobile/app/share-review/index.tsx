@@ -58,7 +58,14 @@ export default function ShareReviewScreen() {
     if (params.shareExternal) {
       setShareExternal(params.shareExternal === 'true');
     }
-  }, [params.media, params.mediaType, params.selectedItemId, params.rating, params.reviewText, params.shareExternal]);
+    // Restore review mode and selected items
+    if (params.reviewMode) {
+      setReviewMode(params.reviewMode as 'single' | 'multiple' | 'trip');
+    }
+    if (params.selectedItems) {
+      setSelectedItems(JSON.parse(params.selectedItems as string));
+    }
+  }, [params.media, params.mediaType, params.selectedItemId, params.rating, params.reviewText, params.shareExternal, params.reviewMode, params.selectedItems]);
 
   const openCamera = (mode: 'photo' | 'video') => {
     // Save current form state before navigating to camera
@@ -71,6 +78,12 @@ export default function ShareReviewScreen() {
         rating: rating.toString(),
         reviewText,
         shareExternal: shareExternal.toString(),
+        // Pass receipt data to preserve it
+        storeName,
+        items: JSON.stringify(receiptItems),
+        // Pass review mode and selected items to preserve them
+        reviewMode,
+        selectedItems: JSON.stringify(selectedItems),
       },
     });
   };

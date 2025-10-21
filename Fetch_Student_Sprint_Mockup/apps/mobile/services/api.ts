@@ -14,7 +14,7 @@ const getApiBaseUrl = () => {
   }
   // For iOS/Android - Using current Wi-Fi IP
   // Make sure your iPhone is on the same Wi-Fi network as your computer
-  return 'http://192.168.12.58:3000/api';
+  return 'http://192.168.0.105:3000/api';
 };
 
 const API_BASE_URL = getApiBaseUrl();
